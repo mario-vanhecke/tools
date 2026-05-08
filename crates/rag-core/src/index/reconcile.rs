@@ -1,20 +1,45 @@
 use super::pipeline::{write_indexed_content, write_status_only};
 use super::{FileResult, IndexOptions, Outcome};
-use crate::chunk::sha256_hex;
+use crate::chunk::{sha256_hex, Chunk, ChunkInput};
+use crate::config::ChunkingConfig;
 use crate::embed::Embedder;
 use crate::error::Result;
 use crate::extract::{ExtractionResult, ExtractorRegistry};
 use crate::registry::{FileRow, FileStatus};
 use crate::vault::Vault;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-pub fn process_one(
-    vault: &Vault,
-    row: &FileRow,
-    extractors: &ExtractorRegistry,
-    embedder: &dyn Embedder,
-    opts: &IndexOptions,
-) -> Result<FileResult> {
+/// Outcome of the pre-extraction decision tree.
+pub enum Precheck {
+    /// Row was fully resolved (status was updated and/or no work is needed).
+    Resolved(FileResult),
+    /// Row needs extraction + chunking. The main thread dispatches `task` to
+    /// a worker; the worker calls `do_extract` and the result is fed back to
+    /// `finalize` (which runs the embedder + DB write on the main thread).
+    NeedsExtraction(ExtractTask),
+}
+
+#[derive(Clone, Debug)]
+pub struct ExtractTask {
+    pub row: FileRow,
+    pub abs_path: PathBuf,
+    pub ext: String,
+    pub mtime_ms: Option<i64>,
+    pub size: i64,
+    pub title: Option<String>,
+}
+
+#[derive(Debug)]
+pub enum Extracted {
+    Chunks(Vec<Chunk>),
+    NeedsOcr,
+    Failed { detail: String, message: String },
+    NoExtractor,
+}
+
+/// Phase 1 of the per-row pipeline: stat, classify, and either resolve inline
+/// (status update only) or hand back an `ExtractTask` for the worker pool.
+pub fn precheck(vault: &Vault, row: &FileRow, opts: &IndexOptions) -> Result<Precheck> {
     let abs = vault.absolutize(&row.path);
     let meta = std::fs::metadata(&abs);
 
@@ -29,14 +54,14 @@ pub fn process_one(
                 None,
                 row.status != FileStatus::Missing,
             )?;
-            return Ok(FileResult {
+            return Ok(Precheck::Resolved(FileResult {
                 path: row.path.clone(),
                 outcome: Outcome::Missing,
                 chunks_added: 0,
                 chunks_replaced: 0,
                 status_detail: None,
                 status_note: None,
-            });
+            }));
         }
     };
     if !meta.is_file() {
@@ -48,14 +73,14 @@ pub fn process_one(
             Some("registered path is not a regular file"),
             true,
         )?;
-        return Ok(FileResult {
+        return Ok(Precheck::Resolved(FileResult {
             path: row.path.clone(),
             outcome: Outcome::Failed,
             chunks_added: 0,
             chunks_replaced: 0,
             status_detail: Some("path_not_a_file".to_string()),
             status_note: Some("registered path is not a regular file".to_string()),
-        });
+        }));
     }
 
     let ext = Path::new(&row.path)
@@ -79,14 +104,14 @@ pub fn process_one(
             None,
             row.status == FileStatus::Indexed,
         )?;
-        return Ok(FileResult {
+        return Ok(Precheck::Resolved(FileResult {
             path: row.path.clone(),
             outcome: Outcome::Unsupported,
             chunks_added: 0,
             chunks_replaced: 0,
             status_detail: Some("extension_not_supported".to_string()),
             status_note: None,
-        });
+        }));
     }
 
     if vault
@@ -104,14 +129,14 @@ pub fn process_one(
             None,
             row.status == FileStatus::Indexed,
         )?;
-        return Ok(FileResult {
+        return Ok(Precheck::Resolved(FileResult {
             path: row.path.clone(),
             outcome: Outcome::Excluded,
             chunks_added: 0,
             chunks_replaced: 0,
             status_detail: Some("extension_excluded_by_config".to_string()),
             status_note: None,
-        });
+        }));
     }
 
     if meta.len() > vault.config.files.size_cap_bytes {
@@ -123,14 +148,14 @@ pub fn process_one(
             None,
             row.status == FileStatus::Indexed,
         )?;
-        return Ok(FileResult {
+        return Ok(Precheck::Resolved(FileResult {
             path: row.path.clone(),
             outcome: Outcome::TooLarge,
             chunks_added: 0,
             chunks_replaced: 0,
             status_detail: Some("size_exceeds_cap".to_string()),
             status_note: None,
-        });
+        }));
     }
 
     let mtime_ms = meta
@@ -145,65 +170,117 @@ pub fn process_one(
         && row.last_mtime == mtime_ms
         && row.last_size == Some(size)
     {
-        return Ok(FileResult {
+        return Ok(Precheck::Resolved(FileResult {
             path: row.path.clone(),
             outcome: Outcome::Skipped,
             chunks_added: 0,
             chunks_replaced: 0,
             status_detail: None,
             status_note: None,
-        });
+        }));
     }
 
     if row.status == FileStatus::Failed && !opts.retry_failed && !opts.force {
-        return Ok(FileResult {
+        return Ok(Precheck::Resolved(FileResult {
             path: row.path.clone(),
             outcome: Outcome::Skipped,
             chunks_added: 0,
             chunks_replaced: 0,
             status_detail: row.status_detail.clone(),
             status_note: row.status_note.clone(),
-        });
+        }));
     }
 
-    // Processing path.
-    let extractor = match extractors.for_extension(&ext) {
+    let title = Path::new(&row.path)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .map(|s| s.to_string());
+
+    Ok(Precheck::NeedsExtraction(ExtractTask {
+        row: row.clone(),
+        abs_path: abs,
+        ext,
+        mtime_ms,
+        size,
+        title,
+    }))
+}
+
+/// Phase 2 (worker thread): extract + chunk. No DB or vault access; pure data.
+pub fn do_extract(
+    extractors: &ExtractorRegistry,
+    chunking: &ChunkingConfig,
+    task: &ExtractTask,
+) -> Extracted {
+    let extractor = match extractors.for_extension(&task.ext) {
         Some(e) => e.clone(),
-        None => {
-            // Supported extension but no extractor wired (e.g. pandoc missing
-            // for docx/pdf). Mark failed with a clear detail.
+        None => return Extracted::NoExtractor,
+    };
+    match extractor.extract(&task.abs_path) {
+        ExtractionResult::NeedsOcr => Extracted::NeedsOcr,
+        ExtractionResult::Failed { detail, message } => Extracted::Failed { detail, message },
+        ExtractionResult::Ok(extracted) => {
+            let chunks = crate::chunk::chunk(
+                &ChunkInput {
+                    markdown: &extracted.markdown,
+                    page_boundaries: extracted.page_boundaries.as_deref(),
+                    document_title: task.title.as_deref(),
+                },
+                chunking,
+            );
+            if chunks.is_empty() {
+                Extracted::Failed {
+                    detail: "no_chunks_produced".to_string(),
+                    message: "extraction returned content but chunker produced no chunks"
+                        .to_string(),
+                }
+            } else {
+                Extracted::Chunks(chunks)
+            }
+        }
+    }
+}
+
+/// Phase 3 (main thread): given the worker's extraction result, embed and
+/// write transactionally. The consistency invariant is upheld here.
+pub fn finalize(
+    vault: &Vault,
+    embedder: &dyn Embedder,
+    task: ExtractTask,
+    extracted: Extracted,
+) -> Result<FileResult> {
+    match extracted {
+        Extracted::NoExtractor => {
+            let detail = "no_extractor_available";
+            let message = format!("no extractor registered for .{}", task.ext);
             write_status_only(
                 vault,
-                row,
+                &task.row,
                 FileStatus::Failed,
-                Some("no_extractor_available"),
-                Some(&format!("no extractor registered for .{}", ext)),
-                row.status == FileStatus::Indexed,
+                Some(detail),
+                Some(&message),
+                task.row.status == FileStatus::Indexed,
             )?;
-            return Ok(FileResult {
-                path: row.path.clone(),
+            Ok(FileResult {
+                path: task.row.path,
                 outcome: Outcome::Failed,
                 chunks_added: 0,
                 chunks_replaced: 0,
-                status_detail: Some("no_extractor_available".to_string()),
-                status_note: Some(format!("no extractor registered for .{}", ext)),
-            });
+                status_detail: Some(detail.to_string()),
+                status_note: Some(message),
+            })
         }
-    };
-
-    let result = extractor.extract(&abs);
-    match result {
-        ExtractionResult::NeedsOcr => {
+        Extracted::NeedsOcr => {
             write_status_only(
                 vault,
-                row,
+                &task.row,
                 FileStatus::NeedsOcr,
                 Some("no_extractable_text"),
                 None,
-                row.status == FileStatus::Indexed,
+                task.row.status == FileStatus::Indexed,
             )?;
             Ok(FileResult {
-                path: row.path.clone(),
+                path: task.row.path,
                 outcome: Outcome::NeedsOcr,
                 chunks_added: 0,
                 chunks_replaced: 0,
@@ -211,17 +288,17 @@ pub fn process_one(
                 status_note: None,
             })
         }
-        ExtractionResult::Failed { detail, message } => {
+        Extracted::Failed { detail, message } => {
             write_status_only(
                 vault,
-                row,
+                &task.row,
                 FileStatus::Failed,
                 Some(&detail),
                 Some(&message),
-                row.status == FileStatus::Indexed,
+                task.row.status == FileStatus::Indexed,
             )?;
             Ok(FileResult {
-                path: row.path.clone(),
+                path: task.row.path,
                 outcome: Outcome::Failed,
                 chunks_added: 0,
                 chunks_replaced: 0,
@@ -229,54 +306,21 @@ pub fn process_one(
                 status_note: Some(message),
             })
         }
-        ExtractionResult::Ok(extracted) => {
-            let title = Path::new(&row.path)
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .map(|s| s.to_string());
-            let chunks = crate::chunk::chunk(
-                &crate::chunk::ChunkInput {
-                    markdown: &extracted.markdown,
-                    page_boundaries: extracted.page_boundaries.as_deref(),
-                    document_title: title.as_deref(),
-                },
-                &vault.config.chunking,
-            );
-            if chunks.is_empty() {
-                write_status_only(
-                    vault,
-                    row,
-                    FileStatus::Failed,
-                    Some("no_chunks_produced"),
-                    Some("extraction returned content but chunker produced no chunks"),
-                    row.status == FileStatus::Indexed,
-                )?;
-                return Ok(FileResult {
-                    path: row.path.clone(),
-                    outcome: Outcome::Failed,
-                    chunks_added: 0,
-                    chunks_replaced: 0,
-                    status_detail: Some("no_chunks_produced".to_string()),
-                    status_note: Some(
-                        "extraction returned content but chunker produced no chunks".to_string(),
-                    ),
-                });
-            }
-
+        Extracted::Chunks(chunks) => {
             let texts: Vec<&str> = chunks.iter().map(|c| c.content.as_str()).collect();
             let embeddings = match embedder.embed_batch(&texts) {
                 Ok(e) => e,
                 Err(e) => {
                     write_status_only(
                         vault,
-                        row,
+                        &task.row,
                         FileStatus::Failed,
                         Some("embedding_error"),
                         Some(&e.to_string()),
-                        row.status == FileStatus::Indexed,
+                        task.row.status == FileStatus::Indexed,
                     )?;
                     return Ok(FileResult {
-                        path: row.path.clone(),
+                        path: task.row.path,
                         outcome: Outcome::Failed,
                         chunks_added: 0,
                         chunks_replaced: 0,
@@ -286,35 +330,52 @@ pub fn process_one(
                 }
             };
 
-            // Hash the on-disk file as documentary evidence of what was indexed.
-            let bytes = std::fs::read(&abs)?;
+            let bytes = std::fs::read(&task.abs_path)?;
             let content_hash = sha256_hex(&bytes);
 
             let chunks_added = chunks.len() as u32;
-            let chunks_replaced = if row.status == FileStatus::Indexed {
-                count_existing_chunks(vault, row.id)?
+            let chunks_replaced = if task.row.status == FileStatus::Indexed {
+                count_existing_chunks(vault, task.row.id)?
             } else {
                 0
             };
 
             write_indexed_content(
                 vault,
-                row,
+                &task.row,
                 &chunks,
                 &embeddings,
-                mtime_ms,
-                size,
+                task.mtime_ms,
+                task.size,
                 &content_hash,
             )?;
 
             Ok(FileResult {
-                path: row.path.clone(),
+                path: task.row.path,
                 outcome: Outcome::Indexed,
                 chunks_added,
                 chunks_replaced,
                 status_detail: None,
                 status_note: None,
             })
+        }
+    }
+}
+
+/// Sequential per-row pipeline (used when extract_concurrency = 1 and by
+/// existing callers). Wraps precheck + do_extract + finalize.
+pub fn process_one(
+    vault: &Vault,
+    row: &FileRow,
+    extractors: &ExtractorRegistry,
+    embedder: &dyn Embedder,
+    opts: &IndexOptions,
+) -> Result<FileResult> {
+    match precheck(vault, row, opts)? {
+        Precheck::Resolved(result) => Ok(result),
+        Precheck::NeedsExtraction(task) => {
+            let extracted = do_extract(extractors, &vault.config.chunking, &task);
+            finalize(vault, embedder, task, extracted)
         }
     }
 }

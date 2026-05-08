@@ -140,6 +140,7 @@ Notable keys (see `rag config list --defaults` for the full list):
 |---|---|---|
 | `embedding.model` | `BAAI/bge-m3` | only when no chunks exist |
 | `embedding.device` | `auto` | always (`auto` / `cpu` / `metal` / `cuda`) |
+| `embedding.batch_size` | `64` | always (raise to 128+ on Metal/CUDA) |
 | `chunking.target_tokens` | `400` | always |
 | `chunking.max_tokens` | `800` | always |
 | `chunking.overlap_tokens` | `50` | always |

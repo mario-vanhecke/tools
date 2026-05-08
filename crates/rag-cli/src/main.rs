@@ -17,7 +17,10 @@ fn run() -> i32 {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("warn")),
+                // rag_core at info so users see the device-pick line during
+                // index; everything else at warn so transitive crates stay
+                // quiet.
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("rag_core=info,warn")),
         )
         .with_target(false)
         .without_time()

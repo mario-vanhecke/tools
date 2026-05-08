@@ -26,18 +26,22 @@ jobs:
           - target: aarch64-apple-darwin
             os:     macos-latest
             archive: tar.gz
+            features: metal
           # Cross-compile Intel macOS from the arm64 runner — GitHub has
           # effectively retired the macos-13 (Intel) hosted runners; queues
           # never drain. Rust handles the cross-target toolchain fine.
           - target: x86_64-apple-darwin
             os:     macos-latest
             archive: tar.gz
+            features: metal
           - target: x86_64-unknown-linux-gnu
             os:     ubuntu-latest
             archive: tar.gz
+            features: ''
           - target: x86_64-pc-windows-msvc
             os:     windows-latest
             archive: zip
+            features: ''
 
     steps:
       - uses: actions/checkout@v4
@@ -53,7 +57,14 @@ jobs:
           key: ${{ matrix.target }}
 
       - name: Build
-        run: cargo build --release --target ${{ matrix.target }} --bin rag
+        shell: bash
+        run: |
+          features="${{ matrix.features }}"
+          if [ -n "$features" ]; then
+            cargo build --release --target ${{ matrix.target }} --bin rag --features "$features"
+          else
+            cargo build --release --target ${{ matrix.target }} --bin rag
+          fi
 
       - name: Stage artifact (Unix)
         if: matrix.archive == 'tar.gz'

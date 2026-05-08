@@ -216,7 +216,7 @@ pub fn default_for(key: &str) -> Option<&'static Value> {
     static D_EMBEDDING_DEVICE: once_cell_lite::Lazy<Value> =
         once_cell_lite::Lazy::new(|| Value::String("auto".to_string()));
     static D_EMBEDDING_BATCH: once_cell_lite::Lazy<Value> =
-        once_cell_lite::Lazy::new(|| Value::from(32u64));
+        once_cell_lite::Lazy::new(|| Value::from(64u64));
     static D_CHUNK_TARGET: once_cell_lite::Lazy<Value> =
         once_cell_lite::Lazy::new(|| Value::from(400u64));
     static D_CHUNK_MAX: once_cell_lite::Lazy<Value> =

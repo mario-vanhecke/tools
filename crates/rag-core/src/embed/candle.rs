@@ -179,26 +179,47 @@ impl Embedder for CandleEmbedder {
 }
 
 fn pick_device(pref: EmbeddingDevice) -> Result<Device> {
-    match pref {
-        EmbeddingDevice::Cpu => Ok(Device::Cpu),
-        EmbeddingDevice::Metal => Device::new_metal(0).map_err(|e| Error::embedder(e.to_string())),
-        EmbeddingDevice::Cuda => Device::new_cuda(0).map_err(|e| Error::embedder(e.to_string())),
+    let device = match pref {
+        EmbeddingDevice::Cpu => Device::Cpu,
+        EmbeddingDevice::Metal => {
+            Device::new_metal(0).map_err(|e| Error::embedder(e.to_string()))?
+        }
+        EmbeddingDevice::Cuda => Device::new_cuda(0).map_err(|e| Error::embedder(e.to_string()))?,
         EmbeddingDevice::Auto => {
             #[cfg(target_os = "macos")]
-            {
-                if let Ok(d) = Device::new_metal(0) {
-                    return Ok(d);
-                }
-            }
+            let metal = Device::new_metal(0);
             #[cfg(not(target_os = "macos"))]
-            {
-                if let Ok(d) = Device::new_cuda(0) {
-                    return Ok(d);
+            let metal: std::result::Result<Device, candle_core::Error> =
+                Err(candle_core::Error::Msg("metal: not on macos".to_string()));
+            #[cfg(not(target_os = "macos"))]
+            let cuda = Device::new_cuda(0);
+            #[cfg(target_os = "macos")]
+            let cuda: std::result::Result<Device, candle_core::Error> = Err(
+                candle_core::Error::Msg("cuda: not on macos build".to_string()),
+            );
+
+            match (metal, cuda) {
+                (Ok(d), _) => d,
+                (_, Ok(d)) => d,
+                (Err(e1), Err(e2)) => {
+                    tracing::info!(
+                        "embedder: GPU unavailable (metal: {}, cuda: {}); using CPU. \
+                         Build with `--features metal` (macOS) or `--features cuda` (Linux) for acceleration.",
+                        e1,
+                        e2
+                    );
+                    Device::Cpu
                 }
             }
-            Ok(Device::Cpu)
         }
-    }
+    };
+    let label = match &device {
+        Device::Cpu => "cpu",
+        Device::Metal(_) => "metal",
+        Device::Cuda(_) => "cuda",
+    };
+    tracing::info!("embedder: device = {}", label);
+    Ok(device)
 }
 
 fn ensure_model_files(

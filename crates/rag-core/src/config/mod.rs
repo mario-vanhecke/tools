@@ -113,7 +113,7 @@ impl Config {
                     g(keys::EMBEDDING_DEVICE).as_str().unwrap_or("auto"),
                 )
                 .unwrap_or(EmbeddingDevice::Auto),
-                batch_size: g(keys::EMBEDDING_BATCH_SIZE).as_u64().unwrap_or(32) as u32,
+                batch_size: g(keys::EMBEDDING_BATCH_SIZE).as_u64().unwrap_or(64) as u32,
             },
             chunking: ChunkingConfig {
                 target_tokens: g(keys::CHUNKING_TARGET_TOKENS).as_u64().unwrap_or(400) as u32,
