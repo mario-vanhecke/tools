@@ -719,7 +719,7 @@ dependencies = [
 
 [[package]]
 name = "extract-core"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "pdf-extract",
  "serde",
@@ -1618,7 +1618,7 @@ dependencies = [
 
 [[package]]
 name = "md-cli"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1633,7 +1633,7 @@ dependencies = [
 
 [[package]]
 name = "md-core"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "chrono",
  "extract-core",
@@ -2142,7 +2142,7 @@ checksum = "f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf"
 
 [[package]]
 name = "rag-cli"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2159,7 +2159,7 @@ dependencies = [
 
 [[package]]
 name = "rag-core"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "candle-core",
  "candle-nn",
@@ -3108,7 +3108,7 @@ checksum = "ba73ea9cf16a25df0c8caa16c51acb937d5712a8429db78a3ee29d5dcacd3a65"
 
 [[package]]
 name = "vault-core"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "chrono",
  "fs2",

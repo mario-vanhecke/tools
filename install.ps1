@@ -1,7 +1,7 @@
 # Install the rag toolkit (rag + md) from the latest GitHub release.
 #
 # Usage:
-#   irm https://github.com/mario-vanhecke/rag/raw/main/install.ps1 | iex
+#   irm https://github.com/mario-vanhecke/tools/raw/main/install.ps1 | iex
 #
 # Environment overrides:
 #   $env:RAG_VERSION    pin a specific version (default: latest)
@@ -12,7 +12,7 @@
 
 $ErrorActionPreference = 'Stop'
 
-$repo    = 'mario-vanhecke/rag'
+$repo    = 'mario-vanhecke/tools'
 $version = if ($env:RAG_VERSION) { $env:RAG_VERSION } else { 'latest' }
 $tools   = if ($env:RAG_TOOLS)   { $env:RAG_TOOLS -split ',' | ForEach-Object { $_.Trim() } } else { @('rag','md') }
 

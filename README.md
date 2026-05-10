@@ -17,8 +17,8 @@ extra format support.
 ### Homebrew (macOS / Linux) — recommended
 
 ```sh
-brew install mario-vanhecke/rag/rag    # rag: indexer & search
-brew install mario-vanhecke/rag/md     # md:  converter
+brew install mario-vanhecke/tools/rag    # rag: indexer & search
+brew install mario-vanhecke/tools/md     # md:  converter
 ```
 
 Each formula auto-installs `pandoc` (for DOCX/EPUB) and `poppler` (for
@@ -31,13 +31,13 @@ them.
 **macOS / Linux:**
 
 ```sh
-curl -fsSL https://github.com/mario-vanhecke/rag/raw/main/install.sh | sh
+curl -fsSL https://github.com/mario-vanhecke/tools/raw/main/install.sh | sh
 ```
 
 **Windows (PowerShell):**
 
 ```powershell
-irm https://github.com/mario-vanhecke/rag/raw/main/install.ps1 | iex
+irm https://github.com/mario-vanhecke/tools/raw/main/install.ps1 | iex
 ```
 
 Set `RAG_TOOLS=rag` (or `RAG_TOOLS=md`) to install just one. Optional tools
@@ -46,8 +46,8 @@ Set `RAG_TOOLS=rag` (or `RAG_TOOLS=md`) to install just one. Optional tools
 ### From source (any platform with Rust toolchain)
 
 ```sh
-cargo install --git https://github.com/mario-vanhecke/rag rag-cli   # just rag
-cargo install --git https://github.com/mario-vanhecke/rag md-cli    # just md
+cargo install --git https://github.com/mario-vanhecke/tools rag-cli   # just rag
+cargo install --git https://github.com/mario-vanhecke/tools md-cli    # just md
 ```
 
 Add `--features metal` on Apple Silicon for ~9× faster embedding in `rag`,

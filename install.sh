@@ -2,7 +2,7 @@
 # Install the rag toolkit (rag + md) from the latest GitHub release.
 #
 # Usage:
-#   curl -fsSL https://github.com/mario-vanhecke/rag/raw/main/install.sh | sh
+#   curl -fsSL https://github.com/mario-vanhecke/tools/raw/main/install.sh | sh
 #
 # Environment overrides:
 #   RAG_VERSION   pin a specific version (default: latest)
@@ -11,7 +11,7 @@
 
 set -eu
 
-REPO="mario-vanhecke/rag"
+REPO="mario-vanhecke/tools"
 VERSION="${RAG_VERSION:-latest}"
 TOOLS="${RAG_TOOLS:-rag md}"
 
