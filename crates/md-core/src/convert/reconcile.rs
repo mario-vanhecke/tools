@@ -392,23 +392,29 @@ fn output_state(vault: &MdVault, row: &OutputRow) -> (bool, Option<PathBuf>) {
 }
 
 /// Compute the output path (relative to `output_dir`) for a given input.
-/// Default: replace the extension with `.md`. With `collision_aware_naming`,
-/// we'd append the source extension; collision detection across rows is a
-/// future enhancement (today's policy: replace extension; users with two
-/// inputs that collide can rename one source).
 fn plan_output_path(vault: &MdVault, input_path: &str) -> PathBuf {
+    plan_output_path_pure(input_path, vault.config.output.collision_aware_naming)
+}
+
+/// Compute the output path (relative to `output_dir`) for a given input.
+/// Pure function — split from `plan_output_path` so it's trivially testable
+/// without constructing a vault.
+///
+/// - `collision_aware = true`:  `foo.pdf` → `foo.pdf.md` (preserves the
+///   source extension so two inputs with the same stem but different
+///   extensions don't collide on disk).
+/// - `collision_aware = false`: `foo.pdf` → `foo.md` (cleaner filenames).
+pub(crate) fn plan_output_path_pure(input_path: &str, collision_aware: bool) -> PathBuf {
     let p = Path::new(input_path);
-    let stem_with_ext = if vault.config.output.collision_aware_naming {
-        // foo.pdf → foo.pdf.md
+    let filename = if collision_aware {
         format!("{}.md", p.file_name().unwrap().to_string_lossy())
     } else {
-        // foo.pdf → foo.md
         let stem = p.file_stem().unwrap().to_string_lossy();
         format!("{stem}.md")
     };
     match p.parent() {
-        Some(parent) if !parent.as_os_str().is_empty() => parent.join(stem_with_ext),
-        _ => PathBuf::from(stem_with_ext),
+        Some(parent) if !parent.as_os_str().is_empty() => parent.join(filename),
+        _ => PathBuf::from(filename),
     }
 }
 
@@ -422,5 +428,76 @@ fn extractor_name_for(e: &std::sync::Arc<dyn Extractor>) -> &'static str {
         Some("txt") => "plaintext",
         Some("docx") | Some("epub") => "pandoc",
         _ => "other",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::plan_output_path_pure;
+    use std::path::PathBuf;
+
+    #[test]
+    fn collision_aware_preserves_source_extension() {
+        assert_eq!(
+            plan_output_path_pure("books/foo.pdf", true),
+            PathBuf::from("books/foo.pdf.md")
+        );
+        assert_eq!(
+            plan_output_path_pure("books/foo.epub", true),
+            PathBuf::from("books/foo.epub.md")
+        );
+        // Markdown source: still gets `.md.md` (yes, ugly, but consistent).
+        assert_eq!(
+            plan_output_path_pure("notes/x.md", true),
+            PathBuf::from("notes/x.md.md")
+        );
+    }
+
+    #[test]
+    fn collision_aware_off_replaces_extension() {
+        assert_eq!(
+            plan_output_path_pure("books/foo.pdf", false),
+            PathBuf::from("books/foo.md")
+        );
+        assert_eq!(
+            plan_output_path_pure("books/foo.epub", false),
+            PathBuf::from("books/foo.md")
+        );
+    }
+
+    #[test]
+    fn handles_root_level_files() {
+        assert_eq!(
+            plan_output_path_pure("foo.pdf", true),
+            PathBuf::from("foo.pdf.md")
+        );
+        assert_eq!(
+            plan_output_path_pure("foo.pdf", false),
+            PathBuf::from("foo.md")
+        );
+    }
+
+    #[test]
+    fn preserves_nested_paths() {
+        assert_eq!(
+            plan_output_path_pure("a/b/c/d.pdf", true),
+            PathBuf::from("a/b/c/d.pdf.md")
+        );
+    }
+
+    #[test]
+    fn collision_demonstrated() {
+        // The whole point of collision-aware naming: foo.pdf and foo.epub
+        // in the same dir produce different output filenames.
+        let a = plan_output_path_pure("docs/foo.pdf", true);
+        let b = plan_output_path_pure("docs/foo.epub", true);
+        assert_ne!(
+            a, b,
+            "collision-aware mode must disambiguate same-stem different-ext"
+        );
+        // Without collision-aware mode they'd collide:
+        let a2 = plan_output_path_pure("docs/foo.pdf", false);
+        let b2 = plan_output_path_pure("docs/foo.epub", false);
+        assert_eq!(a2, b2);
     }
 }
