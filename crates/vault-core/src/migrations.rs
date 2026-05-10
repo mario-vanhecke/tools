@@ -67,8 +67,14 @@ mod tests {
 
     fn migs() -> Vec<Migration> {
         vec![
-            Migration { version: 1, sql: M1 },
-            Migration { version: 2, sql: M2 },
+            Migration {
+                version: 1,
+                sql: M1,
+            },
+            Migration {
+                version: 2,
+                sql: M2,
+            },
         ]
     }
 

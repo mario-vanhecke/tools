@@ -5,10 +5,12 @@ members = [
     "crates/extract-core",
     "crates/rag-core",
     "crates/rag-cli",
+    "crates/md-core",
+    "crates/md-cli",
 ]
 
 [workspace.package]
-version = "0.1.4"
+version = "0.2.0"
 edition = "2021"
 rust-version = "1.75"
 license = "MIT"
@@ -18,6 +20,7 @@ authors = ["rag contributors"]
 vault-core   = { path = "crates/vault-core" }
 extract-core = { path = "crates/extract-core" }
 rag-core     = { path = "crates/rag-core" }
+md-core      = { path = "crates/md-core" }
 
 # Shared deps
 serde = { version = "1.0", features = ["derive"] }

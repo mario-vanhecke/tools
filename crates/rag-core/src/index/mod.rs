@@ -5,9 +5,9 @@ use crate::embed::Embedder;
 use crate::error::{Error, Result};
 use crate::extract::ExtractorRegistry;
 use crate::vault::Vault;
-use vault_core::FileExt;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use vault_core::FileExt;
 
 #[derive(Debug, Clone, Default)]
 pub struct IndexOptions {

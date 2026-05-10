@@ -1,5 +1,5 @@
 use crate::error::{Error, Result};
-use crate::vault::Vault;
+use crate::vault::MdVault;
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -36,7 +36,7 @@ pub enum AddAction {
     SkippedUnsupported,
 }
 
-pub fn add_paths(vault: &Vault, paths: &[PathBuf], opts: &AddOptions) -> Result<AddReport> {
+pub fn add_paths(vault: &MdVault, paths: &[PathBuf], opts: &AddOptions) -> Result<AddReport> {
     let ignore_matcher = if opts.force {
         VaultIgnore::empty(&vault.root)?
     } else if opts.no_ignore {
@@ -44,8 +44,8 @@ pub fn add_paths(vault: &Vault, paths: &[PathBuf], opts: &AddOptions) -> Result<
     } else {
         VaultIgnore::load(
             &vault.root,
-            ".vaultignore",
-            vault.config.files.respect_vaultignore,
+            ".mdignore",
+            vault.config.files.respect_mdignore,
         )?
     };
 
@@ -72,13 +72,8 @@ pub fn add_paths(vault: &Vault, paths: &[PathBuf], opts: &AddOptions) -> Result<
                 input.display()
             ))));
         }
-        // Canonicalize so that ignore-matcher comparisons against the canonical
-        // vault root succeed (e.g. macOS `/var` -> `/private/var` symlink).
         let abs = abs0.canonicalize().unwrap_or(abs0);
         if abs.is_file() {
-            // A directly-named file bypasses ignore filtering for *single-file*
-            // adds, but we still respect `--skip-unsupported`. Built-in
-            // defaults still apply unless --force.
             let rel = vault.relativize(&abs)?;
             if !opts.force && ignore_matcher.is_ignored(&abs, false) {
                 report.skipped_by_ignore += 1;
@@ -102,17 +97,15 @@ pub fn add_paths(vault: &Vault, paths: &[PathBuf], opts: &AddOptions) -> Result<
         }
     }
 
-    // Persist
     let now = chrono::Utc::now().timestamp_millis();
     if !opts.dry_run {
         let tx = vault.conn.unchecked_transaction()?;
         for abs in &to_add {
             let rel = vault.relativize(abs)?;
             let rel_s = rel.to_string_lossy().to_string();
-            // Already registered?
             let exists: bool = tx
                 .query_row(
-                    "SELECT 1 FROM files WHERE path = ?1",
+                    "SELECT 1 FROM outputs WHERE input_path = ?1",
                     params![rel_s],
                     |_| Ok(true),
                 )
@@ -126,7 +119,7 @@ pub fn add_paths(vault: &Vault, paths: &[PathBuf], opts: &AddOptions) -> Result<
                 continue;
             }
             tx.execute(
-                "INSERT INTO files (path, added_at, status, attempts)
+                "INSERT INTO outputs (input_path, added_at, status, attempts)
                  VALUES (?1, ?2, 'pending', 0)",
                 params![rel_s, now],
             )?;
@@ -138,14 +131,13 @@ pub fn add_paths(vault: &Vault, paths: &[PathBuf], opts: &AddOptions) -> Result<
         }
         tx.commit()?;
     } else {
-        // dry-run: just compute the would-be actions
         for abs in &to_add {
             let rel = vault.relativize(abs)?;
             let rel_s = rel.to_string_lossy().to_string();
             let exists: bool = vault
                 .conn
                 .query_row(
-                    "SELECT 1 FROM files WHERE path = ?1",
+                    "SELECT 1 FROM outputs WHERE input_path = ?1",
                     params![rel_s],
                     |_| Ok(true),
                 )
@@ -171,33 +163,32 @@ pub fn add_paths(vault: &Vault, paths: &[PathBuf], opts: &AddOptions) -> Result<
 
 fn collect_dir(
     dir: &Path,
-    vault: &Vault,
+    vault: &MdVault,
     ignore_matcher: &VaultIgnore,
     opts: &AddOptions,
     supported: &std::collections::HashSet<String>,
     out: &mut Vec<PathBuf>,
     report: &mut AddReport,
 ) -> Result<()> {
-    // Always exclude the vault state directory regardless of flags.
     let state_dir = vault.state_dir.clone();
-    let walker = walkdir::WalkDir::new(dir).follow_links(false);
+    let output_dir = vault.output_dir_abs();
     let force = opts.force;
+    let walker = walkdir::WalkDir::new(dir).follow_links(false);
     let walker = walker.into_iter().filter_entry(move |e| {
         let p = e.path();
-        if p.starts_with(&state_dir) {
+        // Never descend into our own state dir, and never re-add converted
+        // outputs back as new inputs.
+        if p.starts_with(&state_dir) || p.starts_with(&output_dir) {
             return false;
         }
         if force {
             return true;
         }
-        // Prune at the directory level so we don't descend into ignored trees
-        // and report each file inside as "skipped".
         if e.file_type().is_dir() {
             return !ignore_matcher.is_ignored(p, true);
         }
         true
     });
-
     for entry in walker {
         let entry = match entry {
             Ok(e) => e,

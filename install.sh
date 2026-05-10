@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# Install `rag` from the latest GitHub release.
+# Install the rag toolkit (rag + md) from the latest GitHub release.
 #
 # Usage:
 #   curl -fsSL https://github.com/mario-vanhecke/rag/raw/main/install.sh | sh
@@ -7,11 +7,13 @@
 # Environment overrides:
 #   RAG_VERSION   pin a specific version (default: latest)
 #   RAG_PREFIX    install dir (default: ~/.local/bin if writable, else /usr/local/bin)
+#   RAG_TOOLS     space-separated list of binaries to install (default: "rag md")
 
 set -eu
 
 REPO="mario-vanhecke/rag"
 VERSION="${RAG_VERSION:-latest}"
+TOOLS="${RAG_TOOLS:-rag md}"
 
 red()    { printf "\033[31m%s\033[0m" "$1"; }
 green()  { printf "\033[32m%s\033[0m" "$1"; }
@@ -46,7 +48,7 @@ case "$os-$rust_arch" in
   *) err "unsupported platform: $os $arch" ;;
 esac
 
-bold "Installing rag for $os_label ($rust_arch)"; printf "\n"
+bold "Installing rag toolkit ($TOOLS) for $os_label ($rust_arch)"; printf "\n"
 
 # ---------- pick install prefix ----------
 if [ -n "${RAG_PREFIX:-}" ]; then
@@ -60,50 +62,49 @@ else
 fi
 ok "install prefix: $prefix"
 
-# ---------- resolve URL ----------
-if [ "$VERSION" = "latest" ]; then
-  asset_url="https://github.com/${REPO}/releases/latest/download/rag-${target}.tar.gz"
-else
-  asset_url="https://github.com/${REPO}/releases/download/${VERSION}/rag-${target}.tar.gz"
-fi
-
 # ---------- need curl or wget ----------
 if   command -v curl >/dev/null 2>&1; then dl() { curl -fsSL "$1" -o "$2"; }
 elif command -v wget >/dev/null 2>&1; then dl() { wget -q -O "$2" "$1"; }
 else err "neither curl nor wget found; please install one and retry"
 fi
 
-# ---------- download + extract ----------
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
-ok "downloading $asset_url"
-if ! dl "$asset_url" "$tmp/rag.tar.gz"; then
-  err "download failed. check that a release exists at $asset_url"
-fi
+# ---------- install each tool ----------
+for tool in $TOOLS; do
+  if [ "$VERSION" = "latest" ]; then
+    asset_url="https://github.com/${REPO}/releases/latest/download/${tool}-${target}.tar.gz"
+  else
+    asset_url="https://github.com/${REPO}/releases/download/${VERSION}/${tool}-${target}.tar.gz"
+  fi
 
-ok "extracting"
-tar -xzf "$tmp/rag.tar.gz" -C "$tmp"
+  ok "downloading $tool: $asset_url"
+  if ! dl "$asset_url" "$tmp/$tool.tar.gz"; then
+    err "download failed. check that a release exists at $asset_url"
+  fi
 
-# Find the binary in the extracted tree (release tarballs put it at the root).
-bin_src=""
-for candidate in "$tmp/rag" "$tmp/rag-${target}/rag"; do
-  [ -f "$candidate" ] && bin_src="$candidate" && break
+  toolstage="$tmp/$tool-stage"
+  mkdir -p "$toolstage"
+  tar -xzf "$tmp/$tool.tar.gz" -C "$toolstage"
+
+  bin_src=""
+  for candidate in "$toolstage/$tool" "$toolstage/$tool-${target}/$tool"; do
+    [ -f "$candidate" ] && bin_src="$candidate" && break
+  done
+  [ -z "$bin_src" ] && err "binary '$tool' not found inside the tarball"
+
+  if mv "$bin_src" "$prefix/$tool" 2>/dev/null; then
+    :
+  elif command -v sudo >/dev/null 2>&1 && [ "$prefix" = "/usr/local/bin" ]; then
+    note "elevating with sudo to write to $prefix"
+    sudo mv "$bin_src" "$prefix/$tool"
+  else
+    err "could not move binary to $prefix"
+  fi
+  chmod +x "$prefix/$tool" 2>/dev/null || sudo chmod +x "$prefix/$tool"
+  ok "installed: $prefix/$tool"
 done
-[ -z "$bin_src" ] && err "binary 'rag' not found inside the tarball"
-
-# ---------- install ----------
-if mv "$bin_src" "$prefix/rag" 2>/dev/null; then
-  :
-elif command -v sudo >/dev/null 2>&1 && [ "$prefix" = "/usr/local/bin" ]; then
-  note "elevating with sudo to write to $prefix"
-  sudo mv "$bin_src" "$prefix/rag"
-else
-  err "could not move binary to $prefix"
-fi
-chmod +x "$prefix/rag" 2>/dev/null || sudo chmod +x "$prefix/rag"
-
-ok "installed: $prefix/rag"
 
 # ---------- post-install hints ----------
 if ! printf "%s" "$PATH" | tr ':' '\n' | grep -qx "$prefix"; then
@@ -112,15 +113,28 @@ if ! printf "%s" "$PATH" | tr ':' '\n' | grep -qx "$prefix"; then
 fi
 
 if ! command -v pandoc >/dev/null 2>&1; then
-  note "pandoc is not installed. DOCX/PDF support requires it. Markdown/text vaults work without it."
+  note "pandoc is not installed. DOCX/EPUB support requires it. Markdown/text vaults work without it."
   printf "        macOS:  brew install pandoc\n"
   printf "        Debian: sudo apt install pandoc\n"
 fi
 
+if ! command -v pdftotext >/dev/null 2>&1; then
+  note "poppler is not installed. Without it, PDF extraction uses a pure-Rust fallback that fails on some unusual font encodings."
+  printf "        macOS:  brew install poppler\n"
+  printf "        Debian: sudo apt install poppler-utils\n"
+fi
+
 printf "\n"
 bold "Next:"; printf "\n"
-printf "  rag --version\n"
-printf "  rag init .\n"
-printf "  rag add <path>\n"
-printf "  rag index\n"
-printf "  rag search \"<query>\"\n"
+case " $TOOLS " in
+  *" rag "*)
+    printf "  rag --version\n"
+    printf "  rag init . && rag add <path> && rag index && rag search \"<query>\"\n"
+    ;;
+esac
+case " $TOOLS " in
+  *" md "*)
+    printf "  md --version\n"
+    printf "  md init . && md add <path> && md convert\n"
+    ;;
+esac

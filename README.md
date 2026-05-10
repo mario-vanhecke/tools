@@ -1,10 +1,14 @@
-# `rag`
+# `rag` — a small distribution of CLI tools for working with knowledge
 
-A CLI tool for indexing and searching a directory of documents. One vault, one
-SQLite database, twelve commands. No daemon, no LLM, no agent.
+| Tool | What it does |
+|------|--------------|
+| **[`rag`](docs/rag/)** | Index and search a directory of documents. Hybrid retrieval (vector + FTS5) with strong consistency guarantees. |
+| **[`md`](docs/md/)** | Convert documents (PDF, EPUB, DOCX, ...) to markdown with idempotent state tracking and bidirectional source ↔ output traceability. |
 
-`rag` does retrieval. Generation, agents, and chat are deliberately out of
-scope — `rag search --json` is the boundary; higher-level tools build on top.
+Both share the same conventions: a vault directory holds a small SQLite
+manifest and tracks files through a lifecycle (`add` → process → `status`).
+Both ship as small static binaries with optional `pandoc`/`poppler` for
+extra format support.
 
 ---
 
@@ -13,14 +17,16 @@ scope — `rag search --json` is the boundary; higher-level tools build on top.
 ### Homebrew (macOS / Linux) — recommended
 
 ```sh
-brew install mario-vanhecke/rag/rag
+brew install mario-vanhecke/rag/rag    # rag: indexer & search
+brew install mario-vanhecke/rag/md     # md:  converter
 ```
 
-This auto-installs `pandoc` (for DOCX/EPUB) and `poppler` (for high-quality
-PDF extraction via `pdftotext`) as recommended dependencies. Skip them with
-`--without-pandoc` / `--without-poppler` if you don't want them.
+Each formula auto-installs `pandoc` (for DOCX/EPUB) and `poppler` (for
+high-quality PDF extraction via `pdftotext`) as recommended dependencies.
+Skip them with `--without-pandoc` / `--without-poppler` if you don't want
+them.
 
-### One-line installer (no Homebrew)
+### One-line installer (no Homebrew) — installs both `rag` and `md`
 
 **macOS / Linux:**
 
@@ -34,21 +40,23 @@ curl -fsSL https://github.com/mario-vanhecke/rag/raw/main/install.sh | sh
 irm https://github.com/mario-vanhecke/rag/raw/main/install.ps1 | iex
 ```
 
-These install only the `rag` binary. To get DOCX/EPUB and best-quality PDF
-support, install `pandoc` and `poppler` separately — see the table below.
+Set `RAG_TOOLS=rag` (or `RAG_TOOLS=md`) to install just one. Optional tools
+(`pandoc`, `poppler`) install separately — see the table below.
 
 ### From source (any platform with Rust toolchain)
 
 ```sh
-cargo install --git https://github.com/mario-vanhecke/rag rag-cli
+cargo install --git https://github.com/mario-vanhecke/rag rag-cli   # just rag
+cargo install --git https://github.com/mario-vanhecke/rag md-cli    # just md
 ```
 
-Add `--features metal` on Apple Silicon for ~9× faster embedding, or
-`--features cuda` on Linux with CUDA toolkit for NVIDIA acceleration.
+Add `--features metal` on Apple Silicon for ~9× faster embedding in `rag`,
+or `--features cuda` on Linux with CUDA toolkit for NVIDIA acceleration.
+`md` is CPU-only (no embedder).
 
 ---
 
-### What gets indexed by what
+### What formats are supported (applies to both `rag` and `md`)
 
 | Format | Built-in | With `pandoc`     | With `poppler` (`pdftotext`) |
 |--------|----------|-------------------|------------------------------|
@@ -60,8 +68,8 @@ Add `--features metal` on Apple Silicon for ~9× faster embedding, or
 
 The PDF extractor picks its backend at startup: if `pdftotext` is on PATH,
 it uses that. Otherwise it falls back to the bundled pure-Rust extractor.
-Both produce the same `ExtractionResult`; the difference is reliability on
-hard PDFs (image-heavy, unusual fonts, scanned scientific papers).
+Both produce the same text; the difference is reliability on hard PDFs
+(image-heavy, unusual fonts, scanned scientific papers).
 
 ### Manual install instructions for the optional tools
 
@@ -74,17 +82,22 @@ hard PDFs (image-heavy, unusual fonts, scanned scientific papers).
 
 ```sh
 $ rag --version
-rag 0.1.4
+rag 0.2.0
+$ md --version
+md 0.2.0
 $ which pandoc pdftotext      # both present means you're set
 /opt/homebrew/bin/pandoc
 /opt/homebrew/bin/pdftotext
 ```
 
-You can also check after an index run: failed PDFs include a `status_note`
-that says either *"Install poppler..."* (you're on the pure-Rust fallback)
-or a real pdftotext error message (you're on the high-quality path).
+You can also check after a `rag index` or `md convert` run: failed PDFs
+include a `status_note` that says either *"Install poppler..."* (you're
+on the pure-Rust fallback) or a real pdftotext error message (you're on
+the high-quality path).
 
 ## Quickstart
+
+**Index and search** (using `rag`):
 
 ```sh
 cd ~/notes
@@ -94,9 +107,23 @@ rag index                  # downloads bge-m3 on first use, ~2.2 GB
 rag search "branching strategy"
 ```
 
+**Convert documents to markdown** (using `md`):
+
+```sh
+cd ~/library
+md init .                  # creates ./.md/
+md add books/              # registers source files as 'pending'
+md convert                 # writes .md outputs under ./converted/
+md whence converted/books/foo.md.md   # → tells you the source file
+```
+
+`rag` and `md` are independent; you can use one, the other, or both. They
+operate on different vault directories (`.vault/` vs `.md/`) so they don't
+interfere with each other in the same source tree.
+
 ---
 
-## What you get
+## What `rag` gets you
 
 - **Hybrid retrieval** — vector (sqlite-vec) + full-text (FTS5) fused with
   reciprocal rank fusion.

@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Tag to release (e.g. v0.1.0)'
+        description: 'Tag to release (e.g. v0.2.0)'
         required: true
 
 permissions:
@@ -28,8 +28,7 @@ jobs:
             archive: tar.gz
             features: metal
           # Cross-compile Intel macOS from the arm64 runner — GitHub has
-          # effectively retired the macos-13 (Intel) hosted runners; queues
-          # never drain. Rust handles the cross-target toolchain fine.
+          # effectively retired the macos-13 (Intel) hosted runners.
           - target: x86_64-apple-darwin
             os:     macos-latest
             archive: tar.gz
@@ -56,36 +55,51 @@ jobs:
         with:
           key: ${{ matrix.target }}
 
-      - name: Build
+      - name: Build rag (with optional features)
         shell: bash
         run: |
           features="${{ matrix.features }}"
           if [ -n "$features" ]; then
-            cargo build --release --target ${{ matrix.target }} --bin rag --features "$features"
+            cargo build --release --target ${{ matrix.target }} --bin rag --features "rag-cli/$features"
           else
             cargo build --release --target ${{ matrix.target }} --bin rag
           fi
 
-      - name: Stage artifact (Unix)
+      - name: Build md
+        shell: bash
+        # md has no GPU features — pure CPU on every platform.
+        run: cargo build --release --target ${{ matrix.target }} --bin md
+
+      - name: Stage artifacts (Unix)
         if: matrix.archive == 'tar.gz'
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p stage
-          cp "target/${{ matrix.target }}/release/rag" stage/rag
-          cp README.md LICENSE stage/
-          mkdir -p dist
-          tar -czf "dist/rag-${{ matrix.target }}.tar.gz" -C stage rag README.md LICENSE
+          mkdir -p stage-rag stage-md dist
+          cp "target/${{ matrix.target }}/release/rag" stage-rag/rag
+          cp README.md LICENSE stage-rag/
+          tar -czf "dist/rag-${{ matrix.target }}.tar.gz" -C stage-rag rag README.md LICENSE
 
-      - name: Stage artifact (Windows)
+          cp "target/${{ matrix.target }}/release/md" stage-md/md
+          cp README.md LICENSE stage-md/
+          tar -czf "dist/md-${{ matrix.target }}.tar.gz" -C stage-md md README.md LICENSE
+
+      - name: Stage artifacts (Windows)
         if: matrix.archive == 'zip'
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path "stage","dist" | Out-Null
-          Copy-Item "target/${{ matrix.target }}/release/rag.exe" "stage/rag.exe"
-          Copy-Item "README.md" "stage/README.md"
-          Copy-Item "LICENSE"   "stage/LICENSE"
-          Compress-Archive -Path "stage/rag.exe","stage/README.md","stage/LICENSE" -DestinationPath "dist/rag-${{ matrix.target }}.zip" -Force
+          New-Item -ItemType Directory -Force -Path "stage-rag","stage-md","dist" | Out-Null
+          Copy-Item "target/${{ matrix.target }}/release/rag.exe" "stage-rag/rag.exe"
+          Copy-Item "README.md" "stage-rag/README.md"
+          Copy-Item "LICENSE"   "stage-rag/LICENSE"
+          Compress-Archive -Path "stage-rag/rag.exe","stage-rag/README.md","stage-rag/LICENSE" `
+                           -DestinationPath "dist/rag-${{ matrix.target }}.zip" -Force
+
+          Copy-Item "target/${{ matrix.target }}/release/md.exe" "stage-md/md.exe"
+          Copy-Item "README.md" "stage-md/README.md"
+          Copy-Item "LICENSE"   "stage-md/LICENSE"
+          Compress-Archive -Path "stage-md/md.exe","stage-md/README.md","stage-md/LICENSE" `
+                           -DestinationPath "dist/md-${{ matrix.target }}.zip" -Force
 
       - uses: actions/upload-artifact@v4
         with:
@@ -93,6 +107,8 @@ jobs:
           path: |
             dist/rag-${{ matrix.target }}.tar.gz
             dist/rag-${{ matrix.target }}.zip
+            dist/md-${{ matrix.target }}.tar.gz
+            dist/md-${{ matrix.target }}.zip
           if-no-files-found: ignore
 
   release:
@@ -112,7 +128,7 @@ jobs:
       - name: Compute checksums
         run: |
           cd artifacts
-          sha256sum rag-* > SHA256SUMS
+          sha256sum rag-* md-* > SHA256SUMS
 
       - name: Resolve tag
         id: tag
@@ -130,4 +146,5 @@ jobs:
           generate_release_notes: true
           files: |
             artifacts/rag-*
+            artifacts/md-*
             artifacts/SHA256SUMS
