@@ -2,11 +2,13 @@
 //! `DiscoveredItem` they emit, and the document filter the orchestrator
 //! applies on top. The orchestrator itself lives in [`run`].
 
+pub mod fetch;
 pub mod local;
 pub mod run;
 pub mod sharepoint;
 pub mod smb;
 
+pub use fetch::{FetchOptions, FetchReport};
 pub use run::{run, RunOptions, RunReport, SourceRunReport};
 
 use crate::config::Config;

@@ -50,7 +50,8 @@ fn dispatch(args: cli::Cli) -> Result<i32> {
     match args.command {
         Init(c) => commands::init::run(c, json),
         Source(c) => commands::source::run(c, json, vault),
-        Run(c) => commands::run::run(c, json, vault),
+        Discover(c) => commands::run::run(c, json, vault),
+        Fetch(c) => commands::fetch::run(c, json, vault),
         Ls(c) => commands::ls::run(c, json, vault),
         Status(c) => commands::status::run(c, json, vault),
         Find(c) => commands::find::run(c, json, vault),

@@ -55,9 +55,11 @@
 
 use super::{CrawlContext, CrawlStats, Crawler, DiscoveredItem};
 use crate::error::{Error, Result};
+use crate::registry::DocumentRow;
 use crate::source::{Source, Strategy};
 use crate::SourceKind;
 use serde_json::{json, Value};
+use std::io::Read;
 use std::path::Path;
 
 const GRAPH: &str = "https://graph.microsoft.com/v1.0";
@@ -1217,6 +1219,84 @@ fn iso8601_to_ms(s: &str) -> Option<i64> {
         .map(|dt| dt.timestamp_millis())
 }
 
+/// Download one discovered document's bytes, reusing the source's auth. REST
+/// auth (cookie / browser_rest) downloads via `_api/.../$value`; Graph auth
+/// downloads via the `/shares` endpoint keyed by the document's webUrl.
+pub(crate) fn download_document(
+    source: &Source,
+    cache_dir: &Path,
+    doc: &DocumentRow,
+) -> Result<Vec<u8>> {
+    let cfg = GraphConfig::from_source(source)?;
+    match cfg.auth {
+        AuthMode::Cookie => {
+            let cookie = rest::resolve_cookie(&cfg)?;
+            rest_download(&cfg, doc, "Cookie", &cookie)
+        }
+        AuthMode::BrowserRest => {
+            let token = token_auth_code(&cfg, cache_dir, &source.name)?;
+            rest_download(&cfg, doc, "Authorization", &format!("Bearer {token}"))
+        }
+        AuthMode::AuthCode
+        | AuthMode::DeviceCode
+        | AuthMode::AzureCli
+        | AuthMode::ClientCredentials => {
+            let token = fetch_token(&cfg, cache_dir, &source.name)?;
+            graph_download(&cfg, doc, &token)
+        }
+    }
+}
+
+/// REST download: `GET {base}/_api/web/GetFileByServerRelativeUrl('{srv}')/$value`.
+fn rest_download(cfg: &GraphConfig, doc: &DocumentRow, hdr: &str, val: &str) -> Result<Vec<u8>> {
+    let host = cfg.site_hostname.as_deref().ok_or_else(|| {
+        Error::SharePoint("fetch needs `site_hostname` in the source config".into())
+    })?;
+    let base = cfg
+        .rest_base
+        .clone()
+        .unwrap_or_else(|| format!("https://{host}"));
+    let server_rel = server_rel_from_uri(&doc.uri);
+    let url = format!(
+        "{}/_api/web/GetFileByServerRelativeUrl('{}')/$value",
+        base.trim_end_matches('/'),
+        server_rel.replace('\'', "''")
+    );
+    http_get_bytes(&url, hdr, val)
+}
+
+/// Graph download by URL: `GET {graph}/shares/u!{b64url(webUrl)}/driveItem/content`.
+fn graph_download(cfg: &GraphConfig, doc: &DocumentRow, token: &str) -> Result<Vec<u8>> {
+    let share_id = format!("u!{}", base64url(doc.uri.as_bytes()));
+    let url = format!("{}/shares/{share_id}/driveItem/content", cfg.graph_base);
+    http_get_bytes(&url, "Authorization", &format!("Bearer {token}"))
+}
+
+/// The server-relative path of a SharePoint file URL (the part after the host).
+fn server_rel_from_uri(uri: &str) -> String {
+    let rest = uri.split_once("://").map(|(_, r)| r).unwrap_or(uri);
+    match rest.split_once('/') {
+        Some((_, path)) => format!("/{path}"),
+        None => uri.to_string(),
+    }
+}
+
+fn http_get_bytes(url: &str, hdr: &str, val: &str) -> Result<Vec<u8>> {
+    match ureq::get(url).set(hdr, val).call() {
+        Ok(resp) => {
+            let mut buf = Vec::new();
+            resp.into_reader()
+                .read_to_end(&mut buf)
+                .map_err(|e| Error::SharePoint(format!("reading {url}: {e}")))?;
+            Ok(buf)
+        }
+        Err(ureq::Error::Status(401, _)) | Err(ureq::Error::Status(403, _)) => Err(
+            Error::SharePoint("download denied (401/403) — auth expired or insufficient".into()),
+        ),
+        Err(e) => Err(Error::SharePoint(format!("download {url} failed: {e}"))),
+    }
+}
+
 /// Cookie-based crawling via the SharePoint REST API (`/_api/...`), for when
 /// Graph access is blocked by admin-consent policy. Authenticates with the
 /// user's browser session cookies; read-only (GET), so no request digest.
@@ -1585,7 +1665,7 @@ mod rest {
         path.replace('\'', "''")
     }
 
-    fn resolve_cookie(cfg: &GraphConfig) -> Result<String> {
+    pub(super) fn resolve_cookie(cfg: &GraphConfig) -> Result<String> {
         if let Ok(v) = std::env::var(&cfg.cookie_env) {
             if !v.trim().is_empty() {
                 return Ok(v);
