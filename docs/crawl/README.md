@@ -17,9 +17,9 @@ crawl source add team-share   local      /Volumes/team/Documents
 crawl source add field-laptop smb        '\\nas01\projects'
 crawl source add marketing    sharepoint contoso \
       --set site_hostname=contoso.sharepoint.com --set site_path=/sites/Marketing
-crawl run
+crawl discover                       # find documents everywhere
 crawl status
-crawl export --format paths | xargs -I{} echo {}    # → feed rag / md
+crawl fetch --out ./files            # materialize them into one local tree
 ```
 
 It shares the toolkit's conventions: a vault directory holds a SQLite manifest
@@ -90,8 +90,9 @@ crawl 0.1.0
 | `crawl source add <name> <kind> <uri>` | Register a source. |
 | `crawl source ls` / `show <name>` | List sources, or inspect one. |
 | `crawl source rm <name>` | Remove a source and its discovered documents. |
-| `crawl source enable/disable <name>` | Toggle whether `crawl run` includes it. |
-| `crawl run` | Crawl sources; upsert discovered documents; mark vanished ones `gone`. |
+| `crawl source enable/disable <name>` | Toggle whether `crawl discover` includes it. |
+| `crawl discover` | Crawl sources; upsert discovered documents; mark vanished ones `gone`. (alias: `run`) |
+| `crawl fetch` | Materialize documents into a local tree — copy local/SMB, download SharePoint. |
 | `crawl ls` | List discovered documents (`--status`, `--source`, `--ext`, `--limit`). |
 | `crawl status` | Vault state: sources, document counts, what's new. |
 | `crawl find <query>` | Search documents by name/URI substring. |
@@ -108,13 +109,13 @@ Every command accepts `--json`, `--vault <path>`, `--quiet`, and `--verbose`.
 | Code | Meaning |
 |---|---|
 | 0 | Success |
-| 1 | General error (or a source hard-errored during `run`) |
+| 1 | General error (or a source hard-errored during `discover`) |
 | 2 | Invalid arguments (unknown source/kind/strategy) |
 | 3 | No vault found |
 | 4 | Vault corruption / schema mismatch |
 | 5 | Configuration error |
 | 6 | I/O error |
-| 7 | Lock contention (`crawl run --no-wait`) |
+| 7 | Lock contention (`crawl discover --no-wait`) |
 | 10 | Source unreachable (share not mounted, SharePoint auth/network failure) |
 
 ---
@@ -122,7 +123,7 @@ Every command accepts `--json`, `--vault <path>`, `--quiet`, and `--verbose`.
 ## Strategies — how `crawl` decides what to enumerate
 
 A strategy is the answer to *"find documents on its own."* Each source picks one
-(`--strategy`, default `recursive`); `crawl run --strategy ...` overrides it for
+(`--strategy`, default `recursive`); `crawl discover --strategy ...` overrides it for
 one pass.
 
 | Strategy | Traversal | Use it when |
@@ -178,7 +179,7 @@ crawl source add proj smb '\\nas01\projects'
 crawl source add proj smb '\\nas01\projects' --set mount=/Volumes/projects
 ```
 
-If the share isn't mounted, `crawl run` fails with an actionable message (exit
+If the share isn't mounted, `crawl discover` fails with an actionable message (exit
 code 10) instead of silently finding nothing.
 
 ### `sharepoint` — a Microsoft Graph document library
@@ -199,7 +200,7 @@ crawl source add coe sharepoint contoso.sharepoint.com/sites/Marketing \
   --set auth=browser_rest \
   --set site_hostname=contoso.sharepoint.com \
   --set site_path=/sites/Marketing
-crawl run --source coe
+crawl discover --source coe
 ```
 
 It uses the Azure CLI's public client by default (broadly pre-approved in
@@ -222,7 +223,7 @@ crawl source add mkt sharepoint contoso --set auth=browser \
   --set site_hostname=contoso.sharepoint.com \
   --set site_path=/sites/Marketing \
   --set tenant_id=<tenant-id-or-domain>
-crawl run --source mkt
+crawl discover --source mkt
 #   → Opening your browser to sign in to SharePoint…
 ```
 
@@ -241,7 +242,7 @@ or `azure_cli` instead.
 crawl source add mkt sharepoint contoso \
   --set site_hostname=contoso.sharepoint.com --set site_path=/sites/Marketing \
   --set tenant_id=<tenant-id-or-domain>
-crawl run --source mkt
+crawl discover --source mkt
 #   → To sign in, open https://microsoft.com/devicelogin and enter CODE …
 ```
 
@@ -252,7 +253,7 @@ Azure CLI — `crawl` shells out to `az account get-access-token`:
 az login                                  # interactive, once
 crawl source add mkt sharepoint contoso --set auth=azure_cli \
   --set site_hostname=contoso.sharepoint.com --set site_path=/sites/Marketing
-crawl run --source mkt
+crawl discover --source mkt
 ```
 
 **Browser session cookies (`cookie`).** The escape hatch when your tenant gates
@@ -269,7 +270,7 @@ crawl source add coe sharepoint contoso.sharepoint.com/sites/Marketing \
   --set auth=cookie \
   --set site_hostname=contoso.sharepoint.com \
   --set site_path=/sites/Marketing
-crawl run --source coe
+crawl discover --source coe
 ```
 
 It lists the site's document libraries and walks each. Caveat: those cookies
@@ -287,7 +288,7 @@ export CRAWL_SHAREPOINT_SECRET='<client-secret>'
 crawl source add mkt sharepoint contoso --set auth=client_credentials \
   --set tenant_id=<tenant-id> --set client_id=<app-client-id> \
   --set site_hostname=contoso.sharepoint.com --set site_path=/sites/Marketing
-crawl run --source mkt
+crawl discover --source mkt
 ```
 
 | Config key | Meaning |
@@ -316,7 +317,7 @@ document's path is prefixed with its site so they stay distinct.
 crawl source add tenant sharepoint contoso.sharepoint.com \
   --set auth=cookie --set site_hostname=contoso.sharepoint.com \
   --set all_sites=true --set sites_filter=/sites/Engineering --set max_sites=20
-crawl run --source tenant
+crawl discover --source tenant
 #   → Discovered N site(s) to crawl
 ```
 
@@ -327,7 +328,7 @@ cookie/token is scoped to one host.
 
 **Troubleshooting "0 documents" / 403 on a library.** If sign-in succeeds but a
 crawl reports `could not list document libraries … 403`, the token lacks
-SharePoint *content* access. Re-run with `crawl run --reauth` (discards the
+SharePoint *content* access. Re-run with `crawl discover --reauth` (discards the
 cached token and signs in again, requesting `Sites.Read.All`/`Files.Read.All`).
 If the sign-in then says **"need admin approval"**, your tenant gates those
 delegated scopes — either have an admin consent them, or use `--set
@@ -358,7 +359,7 @@ A document row has exactly one status:
 | `too_large` | Found, but over `documents.size_cap_bytes`; recorded, never hashed. |
 | `error` | The crawler could not read or stat the item. |
 
-Only `crawl run` drives transitions. `crawl rm` and `crawl prune` only delete.
+Only `crawl discover` drives transitions. `crawl rm` and `crawl prune` only delete.
 
 ---
 
@@ -386,23 +387,35 @@ crawl config list --defaults
 
 ---
 
-## Feeding the rest of the toolkit
+## The full pipeline: `crawl → md → rag`
 
-`crawl export` is the bridge. By default it emits only live (`present` /
-`modified`) documents:
+`crawl fetch` makes the three tools compose into a discover → convert → search
+pipeline that's **identical for every source** — `fetch` materializes one local
+tree whether a document came from a local folder, an SMB share, or SharePoint,
+and `md`/`rag` consume that tree the same way:
 
 ```sh
-# Index everything crawl found, with rag:
-crawl export --format paths --ext pdf > /tmp/pdfs.txt
-xargs -a /tmp/pdfs.txt rag add
+crawl discover                     # find docs across any mix of sources
+crawl fetch --out ./files          # → files/<source>/<rel_path> (copy local/SMB, download SharePoint)
 
-# Or a structured manifest:
-crawl export --format jsonl > manifest.jsonl
-crawl export --format csv   > inventory.csv
+md add ./files && md convert       # → ./converted/**/*.md
+rag add converted/ && rag index    # downloads the embedding model on first use
+rag search "what's our Tier 1 SLA?"
 ```
 
-(`paths` yields filesystem paths for `local`/`smb` sources and `webUrl`s for
-SharePoint.)
+Each stage is incremental — re-running `discover`/`fetch`/`convert`/`index`
+only processes what changed.
+
+### Or just the metadata
+
+If you only want the inventory (not the bytes), `crawl export` emits the
+registry without fetching:
+
+```sh
+crawl export --format paths        # one locator per line
+crawl export --format jsonl        # full per-document records
+crawl export --format csv          # name, ext, size, status, source, uri
+```
 
 ---
 
@@ -412,7 +425,7 @@ SharePoint.)
 my-vault/
 ├── .crawl/
 │   ├── manifest          # the SQLite database
-│   └── crawl.lock        # crawl run file lock
+│   └── crawl.lock        # crawl discover file lock
 └── ...                   # your content (or sources may live elsewhere entirely)
 ```
 
@@ -482,7 +495,7 @@ printf x > docs/report.pdf; printf y > docs/sheet.xlsx; printf z > docs/sub/note
 "$BIN" info --check
 ```
 
-Try the strategies: `crawl run --strategy shallow`, edit/delete a file and
+Try the strategies: `crawl discover --strategy shallow`, edit/delete a file and
 re-run to watch `modified` / `gone`, or add `--set include_globs` with the
 `targeted` strategy.
 
@@ -506,7 +519,7 @@ SharePoint path (auth, pagination, folder recursion) without credentials.
 
 **5. Test SharePoint against your real tenant** — use `auth=browser` (see the
 [`sharepoint`](#sharepoint--a-microsoft-graph-document-library) section) and run
-`crawl run`; it opens your browser to sign in.
+`crawl discover`; it opens your browser to sign in.
 
 ## License
 
