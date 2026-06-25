@@ -347,6 +347,9 @@ fn device_code_signin_caches_token_and_crawls() {
     assert_eq!(cached["refresh_token"], "REFRESH-1");
 }
 
+// Uses a shell-script stub for `az`, which only Unix can exec directly. The
+// azure_cli code path itself is cross-platform (it shells out to a real `az`).
+#[cfg(unix)]
 #[test]
 fn azure_cli_auth_uses_local_login() {
     let base = start_mock_graph();
