@@ -62,3 +62,51 @@ jobs:
           "$BIN" info --check
           "$BIN" --json config list >/dev/null
           "$BIN" --json status >/dev/null
+
+      - name: Smoke test (crawl)
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN="$PWD/target/release/crawl"
+          T="$(mktemp -d)"
+          cd "$T"
+          "$BIN" init .
+          mkdir -p docs/sub
+          printf 'hello' > docs/a.pdf
+          printf 'world' > docs/notes.txt
+          printf 'deep'  > docs/sub/c.md
+          "$BIN" source add docs local ./docs
+          "$BIN" run
+          "$BIN" status
+          "$BIN" ls
+          "$BIN" find a --ext pdf
+          "$BIN" --json status >/dev/null
+          "$BIN" --json config list >/dev/null
+          "$BIN" info --check
+          test "$("$BIN" export --format paths | wc -l | tr -d ' ')" = "3"
+
+  # crawl is pure-Rust and cross-platform; verify it on Windows too without
+  # pulling rag's candle/GPU stack (which the main job above does not build on
+  # Windows). Builds and tests only the crawl crates.
+  crawl-windows:
+    name: crawl (windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Clippy (crawl)
+        run: cargo clippy -p crawl-core -p crawl-cli --all-targets -- -D warnings
+
+      - name: Test (crawl)
+        run: cargo test -p crawl-core
+
+      - name: Build (crawl, release)
+        run: cargo build -p crawl-cli --release

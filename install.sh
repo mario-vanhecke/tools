@@ -13,7 +13,7 @@ set -eu
 
 REPO="mario-vanhecke/tools"
 VERSION="${RAG_VERSION:-latest}"
-TOOLS="${RAG_TOOLS:-rag md}"
+TOOLS="${RAG_TOOLS:-rag md crawl}"
 
 red()    { printf "\033[31m%s\033[0m" "$1"; }
 green()  { printf "\033[32m%s\033[0m" "$1"; }
@@ -136,5 +136,11 @@ case " $TOOLS " in
   *" md "*)
     printf "  md --version\n"
     printf "  md init . && md add <path> && md convert\n"
+    ;;
+esac
+case " $TOOLS " in
+  *" crawl "*)
+    printf "  crawl --version\n"
+    printf "  crawl init . && crawl source add docs local ./docs && crawl run && crawl ls\n"
     ;;
 esac
