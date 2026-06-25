@@ -76,7 +76,8 @@ jobs:
           printf 'world' > docs/notes.txt
           printf 'deep'  > docs/sub/c.md
           "$BIN" source add docs local ./docs
-          "$BIN" run
+          "$BIN" discover                 # canonical name
+          "$BIN" run                      # hidden alias still works
           "$BIN" status
           "$BIN" ls
           "$BIN" find a --ext pdf
@@ -84,6 +85,10 @@ jobs:
           "$BIN" --json config list >/dev/null
           "$BIN" info --check
           test "$("$BIN" export --format paths | wc -l | tr -d ' ')" = "3"
+          # fetch materializes into a local tree, preserving structure
+          "$BIN" fetch --out ./files
+          test -f "files/docs/sub/c.md"
+          test "$(cat files/docs/notes.txt)" = "world"
 
   # crawl is pure-Rust and cross-platform; verify it on Windows too without
   # pulling rag's candle/GPU stack (which the main job above does not build on

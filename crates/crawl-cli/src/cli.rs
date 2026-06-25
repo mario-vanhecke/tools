@@ -35,8 +35,11 @@ pub enum Command {
     Init(InitCmd),
     /// Manage crawl sources (where to look)
     Source(SourceCmd),
-    /// Crawl sources and record discovered documents
-    Run(RunCmd),
+    /// Discover documents across all sources into the registry
+    #[command(alias = "run")]
+    Discover(RunCmd),
+    /// Materialize discovered documents into a local tree (copy/download)
+    Fetch(FetchCmd),
     /// List discovered documents
     Ls(LsCmd),
     /// Report vault state: sources, document counts, what's new
@@ -142,6 +145,28 @@ pub struct RunCmd {
     #[arg(long)]
     pub no_wait: bool,
     /// Seconds to wait for the lock
+    #[arg(long, default_value = "60")]
+    pub wait: u64,
+}
+
+#[derive(Debug, Args)]
+pub struct FetchCmd {
+    /// Directory to materialize documents under (as <out>/<source>/<rel_path>)
+    #[arg(long, default_value = "files")]
+    pub out: PathBuf,
+    /// Fetch only this source
+    #[arg(long)]
+    pub source: Option<String>,
+    #[arg(long)]
+    pub ext: Option<String>,
+    /// Status filter (default: present + modified)
+    #[arg(long)]
+    pub status: Option<String>,
+    /// Re-fetch even if an up-to-date local copy exists
+    #[arg(long)]
+    pub force: bool,
+    #[arg(long)]
+    pub no_wait: bool,
     #[arg(long, default_value = "60")]
     pub wait: u64,
 }

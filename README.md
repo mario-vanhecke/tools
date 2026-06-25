@@ -120,9 +120,45 @@ md convert                 # writes .md outputs under ./converted/
 md whence converted/books/foo.md.md   # → tells you the source file
 ```
 
-`rag` and `md` are independent; you can use one, the other, or both. They
-operate on different vault directories (`.vault/` vs `.md/`) so they don't
-interfere with each other in the same source tree.
+**Discover & fetch documents from anywhere** (using `crawl`):
+
+```sh
+cd ~/knowledge
+crawl init .               # creates ./.crawl/
+crawl source add docs  local      ./Documents
+crawl source add team   sharepoint contoso.sharepoint.com/sites/Eng \
+    --set auth=browser_rest --set site_hostname=contoso.sharepoint.com --set site_path=/sites/Eng
+crawl discover             # records what it finds, recursively, across all sources
+crawl fetch --out ./files  # materializes the actual files into one local tree
+```
+
+Each tool is independent — use one, two, or all three. They keep separate vault
+directories (`.vault/`, `.md/`, `.crawl/`) so they never interfere in the same
+tree. And they **compose** into a pipeline — see the next section.
+
+---
+
+## The workflow: discover → convert → search
+
+The three tools chain into one end-to-end pipeline. `crawl` finds and fetches
+documents from anywhere, `md` normalizes them to markdown, and `rag` makes them
+searchable:
+
+```sh
+crawl discover                     # find docs across local dirs, SMB shares, SharePoint
+crawl fetch --out ./files          # materialize one local tree (copy local/SMB, download SharePoint)
+
+md add ./files && md convert       # → ./converted/**/*.md
+
+rag add converted/ && rag index    # downloads the bge-m3 embedding model on first use
+rag search "what's our Tier 1 SLA?"
+```
+
+The key is that **`crawl fetch` produces the same shape no matter the source** —
+a tree of files under `files/<source>/<rel_path>` — so `md` and `rag` consume it
+identically whether a document came from a laptop folder, a mounted network
+share, or a SharePoint library. Every stage is incremental: re-running
+`discover` / `fetch` / `convert` / `index` only processes what changed.
 
 ---
 

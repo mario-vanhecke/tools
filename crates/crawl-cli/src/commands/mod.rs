@@ -1,5 +1,6 @@
 pub mod config;
 pub mod export;
+pub mod fetch;
 pub mod find;
 pub mod info;
 pub mod init;
