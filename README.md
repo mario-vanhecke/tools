@@ -4,11 +4,13 @@
 |------|--------------|
 | **[`rag`](docs/rag/)** | Index and search a directory of documents. Hybrid retrieval (vector + FTS5) with strong consistency guarantees. |
 | **[`md`](docs/md/)** | Convert documents (PDF, EPUB, DOCX, ...) to markdown with idempotent state tracking and bidirectional source ↔ output traceability. |
+| **[`crawl`](docs/crawl/)** | Discover documents across local directories, mounted SMB shares, and SharePoint. Records what it finds into a registry you can feed to `rag` / `md`. |
 
-Both share the same conventions: a vault directory holds a small SQLite
-manifest and tracks files through a lifecycle (`add` → process → `status`).
-Both ship as small static binaries with optional `pandoc`/`poppler` for
-extra format support.
+All three share the same conventions: a vault directory holds a small SQLite
+manifest and tracks items through a lifecycle (`add`/`run` → process →
+`status`). All ship as small static binaries; `rag`/`md` use optional
+`pandoc`/`poppler` for extra format support, and `crawl` is pure Rust with no
+runtime dependencies.
 
 ---
 
@@ -26,7 +28,7 @@ high-quality PDF extraction via `pdftotext`) as recommended dependencies.
 Skip them with `--without-pandoc` / `--without-poppler` if you don't want
 them.
 
-### One-line installer (no Homebrew) — installs both `rag` and `md`
+### One-line installer (no Homebrew) — installs `rag`, `md`, and `crawl`
 
 **macOS / Linux:**
 
@@ -40,14 +42,15 @@ curl -fsSL https://github.com/mario-vanhecke/tools/raw/main/install.sh | sh
 irm https://github.com/mario-vanhecke/tools/raw/main/install.ps1 | iex
 ```
 
-Set `RAG_TOOLS=rag` (or `RAG_TOOLS=md`) to install just one. Optional tools
+Set `RAG_TOOLS=rag` (or `md`, or `crawl`) to install just one. Optional tools
 (`pandoc`, `poppler`) install separately — see the table below.
 
 ### From source (any platform with Rust toolchain)
 
 ```sh
-cargo install --git https://github.com/mario-vanhecke/tools rag-cli   # just rag
-cargo install --git https://github.com/mario-vanhecke/tools md-cli    # just md
+cargo install --git https://github.com/mario-vanhecke/tools rag-cli     # just rag
+cargo install --git https://github.com/mario-vanhecke/tools md-cli      # just md
+cargo install --git https://github.com/mario-vanhecke/tools crawl-cli   # just crawl
 ```
 
 Add `--features metal` on Apple Silicon for ~9× faster embedding in `rag`,

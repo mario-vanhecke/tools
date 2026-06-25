@@ -14,7 +14,7 @@ $ErrorActionPreference = 'Stop'
 
 $repo    = 'mario-vanhecke/tools'
 $version = if ($env:RAG_VERSION) { $env:RAG_VERSION } else { 'latest' }
-$tools   = if ($env:RAG_TOOLS)   { $env:RAG_TOOLS -split ',' | ForEach-Object { $_.Trim() } } else { @('rag','md') }
+$tools   = if ($env:RAG_TOOLS)   { $env:RAG_TOOLS -split ',' | ForEach-Object { $_.Trim() } } else { @('rag','md','crawl') }
 
 function Write-Ok    ($msg) { Write-Host "ok    $msg"   -ForegroundColor Green }
 function Write-Note  ($msg) { Write-Host "note  $msg"   -ForegroundColor Yellow }
@@ -101,4 +101,8 @@ if ($tools -contains 'rag') {
 if ($tools -contains 'md') {
     Write-Host '  md --version'
     Write-Host '  md init . && md add <path> && md convert'
+}
+if ($tools -contains 'crawl') {
+    Write-Host '  crawl --version'
+    Write-Host '  crawl init . ; crawl source add docs local ./docs ; crawl run ; crawl ls'
 }

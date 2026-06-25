@@ -62,3 +62,25 @@ jobs:
           "$BIN" info --check
           "$BIN" --json config list >/dev/null
           "$BIN" --json status >/dev/null
+
+      - name: Smoke test (crawl)
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN="$PWD/target/release/crawl"
+          T="$(mktemp -d)"
+          cd "$T"
+          "$BIN" init .
+          mkdir -p docs/sub
+          printf 'hello' > docs/a.pdf
+          printf 'world' > docs/notes.txt
+          printf 'deep'  > docs/sub/c.md
+          "$BIN" source add docs local ./docs
+          "$BIN" run
+          "$BIN" status
+          "$BIN" ls
+          "$BIN" find a --ext pdf
+          "$BIN" --json status >/dev/null
+          "$BIN" --json config list >/dev/null
+          "$BIN" info --check
+          test "$("$BIN" export --format paths | wc -l | tr -d ' ')" = "3"

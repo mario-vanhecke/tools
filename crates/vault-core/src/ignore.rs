@@ -18,6 +18,8 @@ pub const BUILT_IN_DEFAULTS: &[&str] = &[
     ".vaultignore",
     ".md/",
     ".mdignore",
+    ".crawl/",
+    ".crawlignore",
     ".git/",
     ".gitignore",
     ".svn/",

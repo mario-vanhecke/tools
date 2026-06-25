@@ -452,6 +452,41 @@ dependencies = [
 ]
 
 [[package]]
+name = "crawl-cli"
+version = "0.2.2"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "clap",
+ "crawl-core",
+ "libc",
+ "serde",
+ "serde_json",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "crawl-core"
+version = "0.2.2"
+dependencies = [
+ "chrono",
+ "glob",
+ "ignore",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror",
+ "tracing",
+ "ureq",
+ "uuid",
+ "vault-core",
+ "walkdir",
+]
+
+[[package]]
 name = "crc32fast"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3060,6 +3095,8 @@ dependencies = [
  "once_cell",
  "rustls",
  "rustls-pki-types",
+ "serde",
+ "serde_json",
  "url",
  "webpki-roots 0.26.11",
 ]
