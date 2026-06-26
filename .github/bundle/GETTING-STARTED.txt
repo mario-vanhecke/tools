@@ -20,6 +20,12 @@ Unzip this archive anywhere. The executables are in this folder.
 
 Nothing else is required to run the tools — they are self-contained binaries.
 
+The Windows bundle also ships the document converters in .\bin\ (pandoc and
+pdftotext/poppler). md finds them automatically — no install, no PATH change —
+because it looks beside its own .exe. So .docx / .epub / .pdf conversion works
+offline out of the box. (On macOS/Linux these are not bundled; install them
+with brew/apt — see note below.)
+
 ------------------------------------------------------------------------------
  2. The full workflow (Windows / PowerShell example)
 ------------------------------------------------------------------------------
@@ -59,12 +65,14 @@ of them and only new/changed files are processed.
     afterwards search works offline. (The model is too large to ship in this
     zip, which is why it is fetched on demand.)
 
-* md's converters for Office/PDF (optional)
-    md handles Markdown and plain text out of the box. To convert .docx /
-    .epub and to get the best PDF text extraction, install two helpers:
-        winget install --id JohnMacFarlane.Pandoc        (pandoc)
-        winget install --id oschwartz10612.Poppler       (poppler / pdftotext)
-    or with Chocolatey:  choco install pandoc poppler
+* md's converters for Office/PDF
+    WINDOWS: already included in this bundle (.\bin\pandoc.exe and
+    .\bin\pdftotext.exe). Nothing to install — md uses them automatically.
+
+    macOS/Linux: md handles Markdown and plain text out of the box; for
+    .docx/.epub and best-quality PDF, install the two helpers:
+        macOS:         brew install pandoc poppler
+        Debian/Ubuntu: sudo apt install pandoc poppler-utils
     Without them, md still converts Markdown/text and basic PDFs.
 
 ------------------------------------------------------------------------------

@@ -60,9 +60,14 @@ workflow:
 | Linux    | `tools-x86_64-unknown-linux-gnu.tar.gz` |
 
 Unzip it, then run the binaries from that folder (or add it to your `PATH`).
-Two things are fetched on demand, not bundled: `rag`'s embedding model
-(~2.2 GB, downloaded on first `rag index`) and the optional `pandoc`/`poppler`
-converters for `.docx`/`.pdf` — see `GETTING-STARTED.txt` in the archive.
+The **Windows** bundle also includes the document converters (`pandoc` +
+`poppler`/`pdftotext`) under `bin/`, so `.docx`/`.epub`/`.pdf` conversion works
+offline with no extra installs — `md` finds them automatically next to its own
+executable. (On macOS/Linux, install those via `brew`/`apt`.)
+
+The one thing never bundled is `rag`'s embedding model (~2.2 GB), downloaded
+on first `rag index` — it exceeds GitHub's 2 GB asset limit. See
+`GETTING-STARTED.txt` in the archive for details.
 
 ### From source (any platform with Rust toolchain)
 
