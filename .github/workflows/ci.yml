@@ -90,11 +90,28 @@ jobs:
           test -f "files/docs/sub/c.md"
           test "$(cat files/docs/notes.txt)" = "world"
 
-  # crawl is pure-Rust and cross-platform; verify it on Windows too without
-  # pulling rag's candle/GPU stack (which the main job above does not build on
-  # Windows). Builds and tests only the crawl crates.
+      - name: Smoke test (distill + recall)
+        shell: bash
+        # The end-to-end build/search path (with a mock embeddings server) is
+        # covered by distill's integration test above; here we just confirm the
+        # binaries run and the config template round-trips.
+        run: |
+          set -euo pipefail
+          DISTILL="$PWD/target/release/distill"
+          RECALL="$PWD/target/release/recall"
+          T="$(mktemp -d)"; cd "$T"
+          "$DISTILL" --version
+          "$RECALL" --version
+          "$DISTILL" init                 # writes knowledge.toml
+          test -f knowledge.toml
+          "$DISTILL" --help >/dev/null
+          "$RECALL" serve --help >/dev/null
+
+  # crawl and the knowledge stack (kb-core/distill/recall) are pure-Rust and
+  # cross-platform; verify them on Windows too without pulling rag's candle/GPU
+  # stack (which the main job above does not build on Windows).
   crawl-windows:
-    name: crawl (windows)
+    name: crawl + knowledge (windows)
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -107,11 +124,11 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
 
-      - name: Clippy (crawl)
-        run: cargo clippy -p crawl-core -p crawl-cli --all-targets -- -D warnings
+      - name: Clippy
+        run: cargo clippy -p crawl-core -p crawl-cli -p kb-core -p distill -p recall --all-targets -- -D warnings
 
-      - name: Test (crawl)
-        run: cargo test -p crawl-core
+      - name: Test
+        run: cargo test -p crawl-core -p kb-core -p distill -p recall
 
-      - name: Build (crawl, release)
-        run: cargo build -p crawl-cli --release
+      - name: Build (release)
+        run: cargo build -p crawl-cli -p distill -p recall --release

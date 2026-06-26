@@ -13,7 +13,7 @@ set -eu
 
 REPO="mario-vanhecke/tools"
 VERSION="${RAG_VERSION:-latest}"
-TOOLS="${RAG_TOOLS:-rag md crawl}"
+TOOLS="${RAG_TOOLS:-rag md crawl distill recall}"
 
 red()    { printf "\033[31m%s\033[0m" "$1"; }
 green()  { printf "\033[32m%s\033[0m" "$1"; }
@@ -142,5 +142,17 @@ case " $TOOLS " in
   *" crawl "*)
     printf "  crawl --version\n"
     printf "  crawl init . && crawl source add docs local ./docs && crawl run && crawl ls\n"
+    ;;
+esac
+case " $TOOLS " in
+  *" distill "*)
+    printf "  distill --version\n"
+    printf "  distill init && distill build && distill search \"<query>\"\n"
+    ;;
+esac
+case " $TOOLS " in
+  *" recall "*)
+    printf "  recall --version\n"
+    printf "  recall serve knowledge.kb --stdio   # then add it as an MCP server in your harness\n"
     ;;
 esac

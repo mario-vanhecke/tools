@@ -9,10 +9,13 @@ members = [
     "crates/md-cli",
     "crates/crawl-core",
     "crates/crawl-cli",
+    "crates/kb-core",
+    "crates/distill",
+    "crates/recall",
 ]
 
 [workspace.package]
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 rust-version = "1.75"
 license = "MIT"
@@ -24,6 +27,7 @@ extract-core = { path = "crates/extract-core" }
 rag-core     = { path = "crates/rag-core" }
 md-core      = { path = "crates/md-core" }
 crawl-core   = { path = "crates/crawl-core" }
+kb-core      = { path = "crates/kb-core" }
 
 # Shared deps
 serde = { version = "1.0", features = ["derive"] }
@@ -51,6 +55,12 @@ tabled = "0.15"
 indicatif = "0.17"
 colored = "2.1"
 glob = "0.3"
+
+# knowledge-stack (distill/recall) deps
+toml = "0.8"
+tiny_http = "0.12"
+tempfile = "3.10"
+zip = { version = "2.1", default-features = false, features = ["deflate"] }
 
 # Embedder deps
 candle-core = { version = "0.8", default-features = false }

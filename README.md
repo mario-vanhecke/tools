@@ -5,12 +5,17 @@
 | **[`rag`](docs/rag/)** | Index and search a directory of documents. Hybrid retrieval (vector + FTS5) with strong consistency guarantees. |
 | **[`md`](docs/md/)** | Convert documents (PDF, EPUB, DOCX, ...) to markdown with idempotent state tracking and bidirectional source ↔ output traceability. |
 | **[`crawl`](docs/crawl/)** | Discover documents across local directories, mounted SMB shares, and SharePoint. Records what it finds into a registry you can feed to `rag` / `md`. |
+| **[`distill`](docs/knowledge/)** | Build a single portable index (SQLite + sqlite-vec) from local/SMB/SharePoint sources, embedding via a pluggable endpoint. Reference-only — sources stay put. |
+| **[`recall`](docs/knowledge/)** | Serve a `distill` index to an LLM harness (Claude Code, opencode) over **MCP**, so the model searches your documents itself — local (stdio) or remote (HTTP). |
 
-All three share the same conventions: a vault directory holds a small SQLite
-manifest and tracks items through a lifecycle (`add`/`run` → process →
-`status`). All ship as small static binaries; `rag`/`md` use optional
-`pandoc`/`poppler` for extra format support, and `crawl` is pure Rust with no
-runtime dependencies.
+`rag` / `md` / `crawl` share the same conventions: a vault directory holds a
+small SQLite manifest and tracks items through a lifecycle (`add`/`run` →
+process → `status`). All ship as small static binaries; `rag`/`md` use optional
+`pandoc`/`poppler` for extra format support, and `crawl` is pure Rust.
+
+`distill` + `recall` are an **independent, alternative** take on RAG (a single
+`knowledge.toml`, remote embeddings with no bundled model, reference-only index,
+served to the model over MCP). See **[docs/knowledge/](docs/knowledge/)**.
 
 ---
 

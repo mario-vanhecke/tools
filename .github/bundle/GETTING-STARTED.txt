@@ -3,12 +3,21 @@
  Find documents, convert them to Markdown, and search them by meaning.
 ==============================================================================
 
-This bundle contains three command-line tools:
+This bundle contains five command-line tools — two workflows that solve the
+same problem two different ways.
 
+Workflow A (crawl -> md -> rag):
   crawl   discover documents across local folders, network/SMB shares,
           and SharePoint, then materialize them into one local tree
   md      convert those documents (PDF, DOCX, HTML, ...) to Markdown
   rag     index the Markdown and search it semantically
+
+Workflow B (distill -> recall), the knowledge stack:
+  distill build a single portable index from your sources (reference-only;
+          embeds via a pluggable endpoint such as a local Ollama)
+  recall  serve that index to an LLM harness (Claude Code, opencode) over MCP,
+          so the model searches your documents itself
+  See the docs for details: https://github.com/mario-vanhecke/tools/tree/main/docs/knowledge
 
 ------------------------------------------------------------------------------
  1. Install
