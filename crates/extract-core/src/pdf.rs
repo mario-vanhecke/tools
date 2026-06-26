@@ -26,9 +26,9 @@ enum PdfBackend {
 
 impl PdfExtractor {
     pub fn new() -> Self {
-        let backend = match which::which("pdftotext") {
-            Ok(p) => PdfBackend::PdfToText(p),
-            Err(_) => PdfBackend::PureRust,
+        let backend = match crate::tool::locate("pdftotext") {
+            Some(p) => PdfBackend::PdfToText(p),
+            None => PdfBackend::PureRust,
         };
         Self { backend }
     }
