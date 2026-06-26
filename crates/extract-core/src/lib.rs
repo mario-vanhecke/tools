@@ -2,6 +2,7 @@ pub mod markdown;
 pub mod pandoc;
 pub mod pdf;
 pub mod plaintext;
+pub mod tool;
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -46,7 +47,7 @@ impl ExtractorRegistry {
     }
 
     /// Standard registry: markdown, plaintext, PDF (pure Rust), and — if
-    /// pandoc is on PATH — DOCX/EPUB.
+    /// pandoc is available (on PATH or bundled beside the binary) — DOCX/EPUB.
     pub fn standard() -> Self {
         let mut s = Self::empty();
         let md: Arc<dyn Extractor> = Arc::new(markdown::MarkdownExtractor);

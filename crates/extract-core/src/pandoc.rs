@@ -47,7 +47,7 @@ impl PandocExtractor {
     /// Construct iff `pandoc` is on PATH. If not, returns None and the index
     /// pipeline will treat docx/epub as failed with `no_extractor_available`.
     pub fn try_new() -> Option<Self> {
-        which::which("pandoc").ok().map(|binary| Self { binary })
+        crate::tool::locate("pandoc").map(|binary| Self { binary })
     }
 }
 
