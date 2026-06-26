@@ -14,7 +14,7 @@ $ErrorActionPreference = 'Stop'
 
 $repo    = 'mario-vanhecke/tools'
 $version = if ($env:RAG_VERSION) { $env:RAG_VERSION } else { 'latest' }
-$tools   = if ($env:RAG_TOOLS)   { $env:RAG_TOOLS -split ',' | ForEach-Object { $_.Trim() } } else { @('rag','md','crawl') }
+$tools   = if ($env:RAG_TOOLS)   { $env:RAG_TOOLS -split ',' | ForEach-Object { $_.Trim() } } else { @('rag','md','crawl','distill','recall') }
 
 function Write-Ok    ($msg) { Write-Host "ok    $msg"   -ForegroundColor Green }
 function Write-Note  ($msg) { Write-Host "note  $msg"   -ForegroundColor Yellow }
@@ -105,4 +105,12 @@ if ($tools -contains 'md') {
 if ($tools -contains 'crawl') {
     Write-Host '  crawl --version'
     Write-Host '  crawl init . ; crawl source add docs local ./docs ; crawl run ; crawl ls'
+}
+if ($tools -contains 'distill') {
+    Write-Host '  distill --version'
+    Write-Host '  distill init ; distill build ; distill search "<query>"'
+}
+if ($tools -contains 'recall') {
+    Write-Host '  recall --version'
+    Write-Host '  recall serve knowledge.kb --stdio   # add it as an MCP server in your harness'
 }

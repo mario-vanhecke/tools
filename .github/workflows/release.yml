@@ -75,6 +75,13 @@ jobs:
         # crawl is pure CPU too — no feature flags.
         run: cargo build --release --target ${{ matrix.target }} --bin crawl
 
+      - name: Build distill + recall
+        shell: bash
+        # The knowledge stack: pure CPU, no bundled model (embeddings are remote).
+        run: |
+          cargo build --release --target ${{ matrix.target }} --bin distill
+          cargo build --release --target ${{ matrix.target }} --bin recall
+
       - name: Stage artifacts (Unix)
         if: matrix.archive == 'tar.gz'
         shell: bash
@@ -93,16 +100,23 @@ jobs:
           cp README.md LICENSE stage-crawl/
           tar -czf "dist/crawl-${{ matrix.target }}.tar.gz" -C stage-crawl crawl README.md LICENSE
 
-          # Combined bundle: all three tools + docs, so one download does the
-          # whole crawl -> md -> rag workflow.
+          for t in distill recall; do
+            mkdir -p "stage-$t"
+            cp "target/${{ matrix.target }}/release/$t" "stage-$t/$t"
+            cp README.md LICENSE "stage-$t/"
+            tar -czf "dist/$t-${{ matrix.target }}.tar.gz" -C "stage-$t" "$t" README.md LICENSE
+          done
+
+          # Combined bundle: all five tools + docs, so one download covers both
+          # the crawl -> md -> rag workflow and the distill/recall knowledge stack.
           mkdir -p stage-bundle
-          cp "target/${{ matrix.target }}/release/rag"   stage-bundle/rag
-          cp "target/${{ matrix.target }}/release/md"    stage-bundle/md
-          cp "target/${{ matrix.target }}/release/crawl" stage-bundle/crawl
+          for t in rag md crawl distill recall; do
+            cp "target/${{ matrix.target }}/release/$t" "stage-bundle/$t"
+          done
           cp README.md LICENSE stage-bundle/
           cp .github/bundle/GETTING-STARTED.txt stage-bundle/GETTING-STARTED.txt
           tar -czf "dist/tools-${{ matrix.target }}.tar.gz" -C stage-bundle \
-            rag md crawl README.md LICENSE GETTING-STARTED.txt
+            rag md crawl distill recall README.md LICENSE GETTING-STARTED.txt
 
       - name: Stage artifacts (Windows)
         if: matrix.archive == 'zip'
@@ -129,12 +143,21 @@ jobs:
           Compress-Archive -Path "stage-crawl/crawl.exe","stage-crawl/README.md","stage-crawl/LICENSE" `
                            -DestinationPath "dist/crawl-${{ matrix.target }}.zip" -Force
 
-          # Combined bundle: all three tools + docs, so one download does the
-          # whole crawl -> md -> rag workflow.
+          foreach ($t in @("distill","recall")) {
+            New-Item -ItemType Directory -Force -Path "stage-$t" | Out-Null
+            Copy-Item "target/${{ matrix.target }}/release/$t.exe" "stage-$t/$t.exe"
+            Copy-Item "README.md" "stage-$t/README.md"
+            Copy-Item "LICENSE"   "stage-$t/LICENSE"
+            Compress-Archive -Path "stage-$t/$t.exe","stage-$t/README.md","stage-$t/LICENSE" `
+                             -DestinationPath "dist/$t-${{ matrix.target }}.zip" -Force
+          }
+
+          # Combined bundle: all five tools + docs, so one download covers both
+          # the crawl -> md -> rag workflow and the distill/recall knowledge stack.
           New-Item -ItemType Directory -Force -Path "stage-bundle","stage-bundle/bin","stage-bundle/THIRD-PARTY-LICENSES","dl" | Out-Null
-          Copy-Item "target/${{ matrix.target }}/release/rag.exe"   "stage-bundle/rag.exe"
-          Copy-Item "target/${{ matrix.target }}/release/md.exe"    "stage-bundle/md.exe"
-          Copy-Item "target/${{ matrix.target }}/release/crawl.exe" "stage-bundle/crawl.exe"
+          foreach ($t in @("rag","md","crawl","distill","recall")) {
+            Copy-Item "target/${{ matrix.target }}/release/$t.exe" "stage-bundle/$t.exe"
+          }
           Copy-Item "README.md" "stage-bundle/README.md"
           Copy-Item "LICENSE"   "stage-bundle/LICENSE"
           Copy-Item ".github/bundle/GETTING-STARTED.txt" "stage-bundle/GETTING-STARTED.txt"
@@ -176,6 +199,10 @@ jobs:
             dist/md-${{ matrix.target }}.zip
             dist/crawl-${{ matrix.target }}.tar.gz
             dist/crawl-${{ matrix.target }}.zip
+            dist/distill-${{ matrix.target }}.tar.gz
+            dist/distill-${{ matrix.target }}.zip
+            dist/recall-${{ matrix.target }}.tar.gz
+            dist/recall-${{ matrix.target }}.zip
             dist/tools-${{ matrix.target }}.tar.gz
             dist/tools-${{ matrix.target }}.zip
           if-no-files-found: ignore
@@ -197,7 +224,7 @@ jobs:
       - name: Compute checksums
         run: |
           cd artifacts
-          sha256sum rag-* md-* crawl-* tools-* > SHA256SUMS
+          sha256sum rag-* md-* crawl-* distill-* recall-* tools-* > SHA256SUMS
 
       - name: Resolve tag
         id: tag
@@ -217,5 +244,7 @@ jobs:
             artifacts/rag-*
             artifacts/md-*
             artifacts/crawl-*
+            artifacts/distill-*
+            artifacts/recall-*
             artifacts/tools-*
             artifacts/SHA256SUMS
