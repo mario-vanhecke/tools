@@ -45,6 +45,25 @@ irm https://github.com/mario-vanhecke/tools/raw/main/install.ps1 | iex
 Set `RAG_TOOLS=rag` (or `md`, or `crawl`) to install just one. Optional tools
 (`pandoc`, `poppler`) install separately — see the table below.
 
+### Prebuilt bundle — download, unzip, run (no installer)
+
+Each [release](https://github.com/mario-vanhecke/tools/releases/latest) ships a
+single **`tools-<target>`** archive that contains all three tools (`crawl`,
+`md`, `rag`) plus a `GETTING-STARTED.txt`, so one download does the whole
+workflow:
+
+| Platform | Asset |
+|----------|-------|
+| Windows  | `tools-x86_64-pc-windows-msvc.zip` |
+| macOS (Apple Silicon) | `tools-aarch64-apple-darwin.tar.gz` |
+| macOS (Intel) | `tools-x86_64-apple-darwin.tar.gz` |
+| Linux    | `tools-x86_64-unknown-linux-gnu.tar.gz` |
+
+Unzip it, then run the binaries from that folder (or add it to your `PATH`).
+Two things are fetched on demand, not bundled: `rag`'s embedding model
+(~2.2 GB, downloaded on first `rag index`) and the optional `pandoc`/`poppler`
+converters for `.docx`/`.pdf` — see `GETTING-STARTED.txt` in the archive.
+
 ### From source (any platform with Rust toolchain)
 
 ```sh
