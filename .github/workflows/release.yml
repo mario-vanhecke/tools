@@ -93,6 +93,17 @@ jobs:
           cp README.md LICENSE stage-crawl/
           tar -czf "dist/crawl-${{ matrix.target }}.tar.gz" -C stage-crawl crawl README.md LICENSE
 
+          # Combined bundle: all three tools + docs, so one download does the
+          # whole crawl -> md -> rag workflow.
+          mkdir -p stage-bundle
+          cp "target/${{ matrix.target }}/release/rag"   stage-bundle/rag
+          cp "target/${{ matrix.target }}/release/md"    stage-bundle/md
+          cp "target/${{ matrix.target }}/release/crawl" stage-bundle/crawl
+          cp README.md LICENSE stage-bundle/
+          cp .github/bundle/GETTING-STARTED.txt stage-bundle/GETTING-STARTED.txt
+          tar -czf "dist/tools-${{ matrix.target }}.tar.gz" -C stage-bundle \
+            rag md crawl README.md LICENSE GETTING-STARTED.txt
+
       - name: Stage artifacts (Windows)
         if: matrix.archive == 'zip'
         shell: pwsh
@@ -116,6 +127,19 @@ jobs:
           Compress-Archive -Path "stage-crawl/crawl.exe","stage-crawl/README.md","stage-crawl/LICENSE" `
                            -DestinationPath "dist/crawl-${{ matrix.target }}.zip" -Force
 
+          # Combined bundle: all three tools + docs, so one download does the
+          # whole crawl -> md -> rag workflow.
+          New-Item -ItemType Directory -Force -Path "stage-bundle" | Out-Null
+          Copy-Item "target/${{ matrix.target }}/release/rag.exe"   "stage-bundle/rag.exe"
+          Copy-Item "target/${{ matrix.target }}/release/md.exe"    "stage-bundle/md.exe"
+          Copy-Item "target/${{ matrix.target }}/release/crawl.exe" "stage-bundle/crawl.exe"
+          Copy-Item "README.md" "stage-bundle/README.md"
+          Copy-Item "LICENSE"   "stage-bundle/LICENSE"
+          Copy-Item ".github/bundle/GETTING-STARTED.txt" "stage-bundle/GETTING-STARTED.txt"
+          Compress-Archive -Path "stage-bundle/rag.exe","stage-bundle/md.exe","stage-bundle/crawl.exe",`
+                                 "stage-bundle/README.md","stage-bundle/LICENSE","stage-bundle/GETTING-STARTED.txt" `
+                           -DestinationPath "dist/tools-${{ matrix.target }}.zip" -Force
+
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.target }}
@@ -126,6 +150,8 @@ jobs:
             dist/md-${{ matrix.target }}.zip
             dist/crawl-${{ matrix.target }}.tar.gz
             dist/crawl-${{ matrix.target }}.zip
+            dist/tools-${{ matrix.target }}.tar.gz
+            dist/tools-${{ matrix.target }}.zip
           if-no-files-found: ignore
 
   release:
@@ -145,7 +171,7 @@ jobs:
       - name: Compute checksums
         run: |
           cd artifacts
-          sha256sum rag-* md-* crawl-* > SHA256SUMS
+          sha256sum rag-* md-* crawl-* tools-* > SHA256SUMS
 
       - name: Resolve tag
         id: tag
@@ -165,4 +191,5 @@ jobs:
             artifacts/rag-*
             artifacts/md-*
             artifacts/crawl-*
+            artifacts/tools-*
             artifacts/SHA256SUMS

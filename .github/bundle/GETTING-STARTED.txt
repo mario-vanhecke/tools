@@ -1,0 +1,74 @@
+==============================================================================
+ Knowledge tools — crawl + md + rag
+ Find documents, convert them to Markdown, and search them by meaning.
+==============================================================================
+
+This bundle contains three command-line tools:
+
+  crawl   discover documents across local folders, network/SMB shares,
+          and SharePoint, then materialize them into one local tree
+  md      convert those documents (PDF, DOCX, HTML, ...) to Markdown
+  rag     index the Markdown and search it semantically
+
+------------------------------------------------------------------------------
+ 1. Install
+------------------------------------------------------------------------------
+Unzip this archive anywhere. The executables are in this folder.
+
+  - Use them from here directly (e.g.  .\crawl.exe ...  on Windows), OR
+  - Add this folder to your PATH so you can type  crawl / md / rag  anywhere.
+
+Nothing else is required to run the tools — they are self-contained binaries.
+
+------------------------------------------------------------------------------
+ 2. The full workflow (Windows / PowerShell example)
+------------------------------------------------------------------------------
+Run these from an empty working folder where you want your knowledge base.
+On macOS/Linux drop the ".exe" and use forward slashes.
+
+  # --- discover: find documents, recursively, across your sources ---
+  crawl.exe init .
+  crawl.exe source add docs local C:\Users\me\Documents
+  # (optional) a SharePoint site — interactive browser sign-in:
+  # crawl.exe source add team sharepoint contoso.sharepoint.com/sites/Eng --set auth=browser_rest
+  crawl.exe discover
+  crawl.exe fetch --out .\files      # copies/downloads everything into .\files\<source>\...
+
+  # --- convert: turn those files into Markdown ---
+  md.exe init .
+  md.exe add .\files
+  md.exe convert                     # writes .\converted\**\*.md
+
+  # --- search: index and query by meaning ---
+  rag.exe init .
+  rag.exe add .\converted
+  rag.exe index                      # see note below — first run downloads a model
+  rag.exe search "how do we handle releases?"
+
+The key idea: `crawl fetch` produces the SAME folder shape no matter where a
+document came from (local disk, a network share, or SharePoint), so `md` and
+`rag` treat every source identically. Every step is incremental — re-run any
+of them and only new/changed files are processed.
+
+------------------------------------------------------------------------------
+ 3. Two one-time setup notes
+------------------------------------------------------------------------------
+* rag's search model (required for `rag index` / `rag search`)
+    On the first `rag index`, rag downloads the bge-m3 embedding model
+    (~2.2 GB) into its local cache. This needs an internet connection ONCE;
+    afterwards search works offline. (The model is too large to ship in this
+    zip, which is why it is fetched on demand.)
+
+* md's converters for Office/PDF (optional)
+    md handles Markdown and plain text out of the box. To convert .docx /
+    .epub and to get the best PDF text extraction, install two helpers:
+        winget install --id JohnMacFarlane.Pandoc        (pandoc)
+        winget install --id oschwartz10612.Poppler       (poppler / pdftotext)
+    or with Chocolatey:  choco install pandoc poppler
+    Without them, md still converts Markdown/text and basic PDFs.
+
+------------------------------------------------------------------------------
+ 4. More
+------------------------------------------------------------------------------
+Every tool has built-in help:   crawl.exe --help    md.exe --help    rag.exe --help
+Full documentation and source:  https://github.com/mario-vanhecke/tools
